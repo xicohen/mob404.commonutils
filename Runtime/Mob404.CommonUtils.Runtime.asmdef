@@ -1,0 +1,14 @@
+{
+    "name": "Mob404.CommonUtils.Runtime",
+    "rootNamespace": "Mob404.Common",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

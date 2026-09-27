@@ -1,0 +1,16 @@
+{
+  "name": "com.mob404.commonutils",
+  "displayName": "Common Utils",
+  "description": "Tap hop script tien ich tai su dung cho nhieu du an Unity: coroutine wait cache, singleton, safe area adapter, aspect ratio fitter.",
+  "version": "1.0.0",
+  "unity": "2022.3",
+  "author": {
+    "name": "mob404.game"
+  },
+  "keywords": [
+    "utility",
+    "common",
+    "singleton",
+    "safe area"
+  ]
+}
