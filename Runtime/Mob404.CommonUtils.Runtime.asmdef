@@ -1,7 +1,9 @@
 {
     "name": "Mob404.CommonUtils.Runtime",
     "rootNamespace": "Mob404.Common",
-    "references": [],
+    "references": [
+        "UnityEngine.UI"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
