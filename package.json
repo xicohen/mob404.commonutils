@@ -1,8 +1,8 @@
 {
   "name": "com.mob404.commonutils",
   "displayName": "Common Utils",
-  "description": "Tap hop script tien ich tai su dung cho nhieu du an Unity: coroutine wait cache, singleton, safe area adapter, aspect ratio fitter.",
-  "version": "1.1.0",
+  "description": "Tap hop script tien ich tai su dung cho nhieu du an Unity: coroutine wait cache, singleton, safe area adapter, aspect ratio fitter, MobUITool (tool Editor reskin Button/Image hang loat bang file .preset).",
+  "version": "1.2.0",
   "unity": "2022.3",
   "author": {
     "name": "mob404.game"
@@ -11,6 +11,9 @@
     "utility",
     "common",
     "singleton",
-    "safe area"
+    "safe area",
+    "reskin",
+    "button",
+    "preset"
   ]
 }

@@ -1,0 +1,19 @@
+{
+    "name": "Mob404.CommonUtils.Editor",
+    "rootNamespace": "Mob404.Common.Editor",
+    "references": [
+        "Mob404.CommonUtils.Runtime",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
