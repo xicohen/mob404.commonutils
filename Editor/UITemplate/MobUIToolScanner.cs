@@ -24,15 +24,21 @@ namespace Mob404.Common.UITemplate.Editor
             var report = new MobUIToolReport("Scan & Attach");
             var buttonMap = new Dictionary<Sprite, GGButtonType>();
             var imageMap = new Dictionary<Sprite, GGImageType>();
+            var tabMap = new Dictionary<Sprite, GGTabType>();
             var guids = new HashSet<string>();
             foreach (var type in config.types) _AddType(type, buttonMap, guids, report);
             foreach (var type in config.imageTypes) _AddType(type, imageMap, guids, report);
+            foreach (var type in config.tabTypes)
+            {
+                _AddSprite(type.sourceSprite, type, tabMap, guids, report);
+                _AddSprite(MobUIToolApplier.PresetSprite(type.on.imagePreset), type, tabMap, guids, report);
+            }
 
             EditorUtility.DisplayProgressBar(report.title, "Lọc prefab/scene…", 0f);
             var files = MobUIToolAssetUtil.SortByDependency(
                 MobUIToolAssetUtil.FilterContaining(MobUIToolAssetUtil.AllPrefabsAndScenes(), guids));
 
-            int attachedButtons = 0, attachedImages = 0;
+            int attachedButtons = 0, attachedImages = 0, attachedTabs = 0;
             try
             {
                 for (int i = 0; i < files.Count; i++)
@@ -50,7 +56,10 @@ namespace Mob404.Common.UITemplate.Editor
                         entry.result = MobUIToolAssetUtil.Process(path, roots =>
                         {
                             foreach (var root in roots)
+                            {
+                                _AttachTabs(root, config, tabMap, entry, ref attachedTabs);
                                 _Attach(root, config, buttonMap, imageMap, entry, ref attachedButtons, ref attachedImages);
+                            }
                             return entry.objects > 0;
                         }, true, out entry.skipReason);
                     }
@@ -67,7 +76,7 @@ namespace Mob404.Common.UITemplate.Editor
             }
 
             RefreshIndex(config);
-            report.summary = $"{files.Count} file, gắn mới {attachedButtons} button + {attachedImages} image";
+            report.summary = $"{files.Count} file, gắn mới {attachedButtons} button + {attachedImages} image + {attachedTabs} tab";
             return report;
         }
 
@@ -77,6 +86,7 @@ namespace Mob404.Common.UITemplate.Editor
             var byId = new Dictionary<string, GGTypeBase>();
             foreach (var t in config.types) { t.linkedAssets.Clear(); if (!string.IsNullOrEmpty(t.id)) byId[t.id] = t; }
             foreach (var t in config.imageTypes) { t.linkedAssets.Clear(); if (!string.IsNullOrEmpty(t.id)) byId[t.id] = t; }
+            foreach (var t in config.tabTypes) { t.linkedAssets.Clear(); if (!string.IsNullOrEmpty(t.id)) byId[t.id] = t; }
 
             foreach (var path in MobUIToolAssetUtil.AllPrefabsAndScenes())
             {
@@ -190,6 +200,52 @@ namespace Mob404.Common.UITemplate.Editor
                     entry.objects++;
                 }
             }
+        }
+
+        /// <summary>
+        /// Tab: Image dùng sprite nguồn của một loại Tab → gắn GGTab lên tab gốc (tổ tiên gần nhất có Button).
+        /// Tab cấu trúc cũ chưa dùng sprite đó → gắn tay bằng "Attach to selection".
+        /// </summary>
+        private static void _AttachTabs(GameObject root, MobUIToolConfig config, Dictionary<Sprite, GGTabType> tabMap,
+            MobUIToolReport.Entry entry, ref int attachedTabs)
+        {
+            if (tabMap.Count == 0) return;
+            foreach (var image in root.GetComponentsInChildren<Image>(true))
+            {
+                if (image.sprite == null || !tabMap.TryGetValue(image.sprite, out var tabType)) continue;
+                var tabRoot = MobUIToolTabApplier.TabRoot(image.gameObject);
+                if (tabRoot == null) continue;
+                var marker = tabRoot.GetComponent<GGTab>();
+                if (marker != null && config.FindTabType(marker.typeId) != null) continue;
+                if (marker == null) marker = tabRoot.AddComponent<GGTab>();
+                marker.typeId = tabType.id;
+                _Record(marker);
+                attachedTabs++;
+                entry.objects++;
+            }
+        }
+
+        /// <summary>Gắn (hoặc đổi) marker GGTab của loại lên tab chứa từng object đang chọn. Undo được; người dùng tự lưu scene/prefab.</summary>
+        public static int AttachToSelection(GGTabType type, GameObject[] selection, out string message)
+        {
+            int n = 0;
+            var skipped = new List<string>();
+            var done = new HashSet<GameObject>();
+            foreach (var go in selection)
+            {
+                var tabRoot = MobUIToolTabApplier.TabRoot(go);
+                if (tabRoot == null) { skipped.Add(go.name); continue; }
+                if (!done.Add(tabRoot)) continue;
+                var marker = tabRoot.GetComponent<GGTab>();
+                if (marker == null) marker = Undo.AddComponent<GGTab>(tabRoot);
+                else Undo.RecordObject(marker, "MobUITool attach tab");
+                marker.typeId = type.id;
+                _Record(marker);
+                n++;
+            }
+            message = $"Gắn loại '{type.name}' cho {n} tab" + (skipped.Count > 0 ? $"; bỏ qua (không nằm trong GameObject có Button): {string.Join(", ", skipped)}" : "") +
+                      ". Lưu scene/prefab rồi Refresh để thấy trong Linked.";
+            return n;
         }
 
         /// <summary>Xoá marker mồ côi của kiểu kia khi Image được gắn sang tab khác (nếu xoá được từ file này).</summary>

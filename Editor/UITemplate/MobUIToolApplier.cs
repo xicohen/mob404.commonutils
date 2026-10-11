@@ -92,7 +92,7 @@ namespace Mob404.Common.UITemplate.Editor
             return changed;
         }
 
-        private static bool _ApplyRect(Preset preset, RectTransform rt)
+        internal static bool _ApplyRect(Preset preset, RectTransform rt)
         {
             if (TouchesSize(preset) && _LayoutDriven(rt))
                 Warnings.Add($"'{rt.name}': RectTransform đang bị layout (LayoutGroup/ContentSizeFitter/AspectRatioFitter) điều khiển — kích thước có thể bị tính lại.");
@@ -142,7 +142,7 @@ namespace Mob404.Common.UITemplate.Editor
         /// preset Outline → còn đúng 1 Outline (thiếu thì thêm, thừa thì xoá), xoá mọi Shadow; preset Shadow thì ngược lại;
         /// ô trống → xoá cả hai. Preset Missing hoặc sai kiểu → không đụng gì. Trả về true nếu có thay đổi.
         /// </summary>
-        private static bool _SyncEffect(Preset preset, Text text)
+        internal static bool _SyncEffect(Preset preset, Text text)
         {
             if (IsMissing(preset)) return false;
             var keepType = IsEmpty(preset) ? null : EffectType(preset);
@@ -201,7 +201,7 @@ namespace Mob404.Common.UITemplate.Editor
             return removed;
         }
 
-        private static bool _CanRemove(Component c) =>
+        internal static bool _CanRemove(Component c) =>
             !PrefabUtility.IsPartOfPrefabInstance(c) || PrefabUtility.IsAddedComponentOverride(c);
 
         /// <summary>
@@ -263,7 +263,7 @@ namespace Mob404.Common.UITemplate.Editor
         /// Instance lồng nhau đang override một thuộc tính mà giá trị mới trùng prefab nguồn → gỡ override
         /// (thay vì ghi đè), để sửa prefab nguồn về sau vẫn lan xuống instance.
         /// </summary>
-        private static bool _ApplyPreset(Preset preset, Component target)
+        internal static bool _ApplyPreset(Preset preset, Component target)
         {
             var temp = _TempComponent(target.GetType());
             EditorUtility.CopySerialized(target, temp);

@@ -8,23 +8,25 @@ using UnityEngine.UI;
 namespace Mob404.Common.UITemplate.Editor
 {
     /// <summary>
-    /// Cửa sổ quản lý loại, hai tab:
+    /// Cửa sổ quản lý loại, ba tab:
     /// Button — Image có Button, preset Rect Button/Image + khối Text (Text là khoá → Rect Text, Outline/Shadow);
-    /// Image — Image dùng sprite nguồn mà chưa thuộc loại Button, preset Rect Image/Image.
+    /// Image — Image dùng sprite nguồn mà chưa thuộc loại Button, preset Rect Image/Image;
+    /// Tab — tab có Button + hai nửa ON/OFF (Image + Title): Sync structure + preset gốc/ON/OFF + I2 Localize.
     /// Chỉ ghi xuống file khi bấm Scan &amp; Attach / Apply / Remove; Preview không ghi gì.
     /// </summary>
     public class MobUIToolWindow : EditorWindow
     {
         private const int TAB_BUTTON = 0;
         private const int TAB_IMAGE = 1;
-        private static readonly string[] TAB_NAMES = { "Button", "Image" };
+        private const int TAB_TAB = 2;
+        private static readonly string[] TAB_NAMES = { "Button", "Image", "Tab" };
 
         private static bool s_IndexStale = true;
 
         private MobUIToolConfig _config;
         private bool _indexed;
         private int _tab;
-        private readonly int[] _selected = new int[2];
+        private readonly int[] _selected = new int[3];
         private string _search = "";
         private Vector2 _listScroll;
         private Vector2 _detailScroll;
@@ -44,6 +46,14 @@ namespace Mob404.Common.UITemplate.Editor
             var window = GetWindow<MobUIToolWindow>("MobUITool");
             window.minSize = new Vector2(680, 460);
             if (!string.IsNullOrEmpty(typeId)) window._Select(typeId, imageTab ? TAB_IMAGE : TAB_BUTTON);
+        }
+
+        /// <summary>Mở cửa sổ ở tab Tab, chọn sẵn loại typeId.</summary>
+        public static void OpenTab(string typeId)
+        {
+            var window = GetWindow<MobUIToolWindow>("MobUITool");
+            window.minSize = new Vector2(680, 460);
+            window._Select(typeId, TAB_TAB);
         }
 
         private void OnEnable() => EditorApplication.projectChanged += _OnProjectChanged;
@@ -136,7 +146,8 @@ namespace Mob404.Common.UITemplate.Editor
             if (!EditorUtility.DisplayDialog("MobUITool — Scan & Attach",
                     "Tool sẽ mở từng prefab/scene có dùng sprite nguồn và gắn marker (chưa áp style):\n" +
                     "• GGButton nếu Image có Button và sprite thuộc một loại Button;\n" +
-                    "• GGImage cho các Image còn lại có sprite thuộc một loại Image.\n" +
+                    "• GGImage cho các Image còn lại có sprite thuộc một loại Image;\n" +
+                    "• GGTab lên tab (GameObject có Button) chứa Image dùng sprite của một loại Tab.\n" +
                     "Marker mồ côi (loại đã bị xoá) được gắn lại như chưa có.\n\n" +
                     "Không Undo được — nên commit git trước.", "Scan", "Cancel"))
                 return;
@@ -147,7 +158,7 @@ namespace Mob404.Common.UITemplate.Editor
         private void _RemoveOrphans()
         {
             if (!EditorUtility.DisplayDialog("MobUITool — Remove orphan markers",
-                    "Gỡ mọi marker GGButton/GGImage có typeId trống hoặc trỏ tới loại không còn trong config.\n\nKhông Undo được.",
+                    "Gỡ mọi marker GGButton/GGImage/GGTab có typeId trống hoặc trỏ tới loại không còn trong config.\n\nKhông Undo được.",
                     "Remove", "Cancel"))
                 return;
             if (!MobUIToolAssetUtil.SaveOpenEditorsIfUserWantsTo()) return;
@@ -178,12 +189,15 @@ namespace Mob404.Common.UITemplate.Editor
 
         private bool _IsImageTab => _tab == TAB_IMAGE;
 
-        /// <summary>Danh sách loại của tab đang mở (List&lt;GGButtonType&gt; hoặc List&lt;GGImageType&gt;).</summary>
-        private IList _List => _IsImageTab ? (IList)_config.imageTypes : _config.types;
+        private bool _IsTabTab => _tab == TAB_TAB;
 
-        private string _ListProperty => _IsImageTab ? nameof(MobUIToolConfig.imageTypes) : nameof(MobUIToolConfig.types);
+        /// <summary>Danh sách loại của tab đang mở (List&lt;GGButtonType&gt; / List&lt;GGImageType&gt; / List&lt;GGTabType&gt;).</summary>
+        private IList _List => _IsTabTab ? (IList)_config.tabTypes : _IsImageTab ? _config.imageTypes : _config.types;
 
-        private string _Unit => _IsImageTab ? "image" : "button";
+        private string _ListProperty => _IsTabTab ? nameof(MobUIToolConfig.tabTypes)
+            : _IsImageTab ? nameof(MobUIToolConfig.imageTypes) : nameof(MobUIToolConfig.types);
+
+        private string _Unit => _IsTabTab ? "tab" : _IsImageTab ? "image" : "button";
 
         private void _DrawTypeList()
         {
@@ -247,7 +261,7 @@ namespace Mob404.Common.UITemplate.Editor
 
         private void _AddType()
         {
-            GGTypeBase type = _IsImageTab ? (GGTypeBase)new GGImageType() : new GGButtonType();
+            GGTypeBase type = _IsTabTab ? new GGTabType() : _IsImageTab ? (GGTypeBase)new GGImageType() : new GGButtonType();
             type.id = System.Guid.NewGuid().ToString("N").Substring(0, 8);
             type.sourceSprite = _FirstSelectedSprite();
             type.name = _DefaultName(type.sourceSprite);
@@ -260,10 +274,10 @@ namespace Mob404.Common.UITemplate.Editor
         /// <summary>Btn_Yellow / Img_PopupBg — tên loại theo sprite, bỏ tiền tố btn/button/img thừa của tên file.</summary>
         private string _DefaultName(Sprite sprite)
         {
-            string prefix = _IsImageTab ? "Img_" : "Btn_";
+            string prefix = _IsTabTab ? "Tab_" : _IsImageTab ? "Img_" : "Btn_";
             if (sprite == null) return prefix + "New";
             string name = sprite.name;
-            foreach (var p in new[] { "button_", "btn_", "img_", "image_" })
+            foreach (var p in new[] { "button_", "btn_", "img_", "image_", "tab_" })
                 if (name.StartsWith(p, System.StringComparison.OrdinalIgnoreCase)) { name = name.Substring(p.Length); break; }
             return prefix + MobUIToolPresetFactory.Pascal(name);
         }
@@ -363,6 +377,11 @@ namespace Mob404.Common.UITemplate.Editor
         private void _DrawStyle(SerializedObject so, SerializedProperty tp, GGTypeBase type)
         {
             EditorGUILayout.LabelField("Style", EditorStyles.boldLabel);
+            if (type is GGTabType tabType)
+            {
+                _DrawTabStyle(so, tp, tabType);
+                return;
+            }
             var buttonType = type as GGButtonType;
             string owner = buttonType != null ? "Button" : "Image";
 
@@ -389,6 +408,64 @@ namespace Mob404.Common.UITemplate.Editor
                 _PresetRow(so, tp, nameof(GGButtonType.effectPreset), "Outline / Shadow",
                     "File .preset của Outline hoặc Shadow — Text giữ đúng 1 component kiểu đó, xoá kiểu còn lại. Để trống = xoá cả hai",
                     () => buttonType.effectPreset, MobUIToolPresetFactory.Slot.Effect, typeof(Outline), typeof(Shadow));
+            }
+            _EndGroup();
+        }
+
+        /// <summary>
+        /// Loại Tab: khối Structure (quy ước tên, Remove legacy, Localize) + khối Tab gốc + khối ON + khối OFF.
+        /// Nút + của ô preset tạo từ component NGAY TRÊN object đang chọn — chọn đúng node mẫu (vd TabX/ImageOn/Title).
+        /// </summary>
+        private void _DrawTabStyle(SerializedObject so, SerializedProperty tp, GGTabType type)
+        {
+            _BeginGroup("Structure", "Quy ước tên node — Sync structure tạo node còn thiếu theo các tên này");
+            EditorGUI.BeginChangeCheck();
+            EditorGUILayout.PropertyField(tp.FindPropertyRelative(nameof(GGTabType.onName)), new GUIContent("ON node", "Node con của tab giữ trạng thái đang chọn (vd TabButton.m_GoOn)"));
+            EditorGUILayout.PropertyField(tp.FindPropertyRelative(nameof(GGTabType.offName)), new GUIContent("OFF node", "Node con của tab giữ trạng thái chưa chọn (vd TabButton.m_GoOff)"));
+            EditorGUILayout.PropertyField(tp.FindPropertyRelative(nameof(GGTabType.imageName)), new GUIContent("Image node", "Tên node Image trong mỗi nửa"));
+            EditorGUILayout.PropertyField(tp.FindPropertyRelative(nameof(GGTabType.titleName)), new GUIContent("Title node", "Tên node Text trong mỗi nửa"));
+            EditorGUILayout.PropertyField(tp.FindPropertyRelative(nameof(GGTabType.removeLegacy)), new GUIContent("Remove legacy",
+                "Xoá Graphic trên chính nửa ON/OFF và node con ngoài quy ước (vd 'img'). Node có tham chiếu từ ngoài không bị xoá. Xem Preview trước."));
+            EditorGUILayout.PropertyField(tp.FindPropertyRelative(nameof(GGTabType.attachLocalize)), new GUIContent("Attach I2 Localize",
+                "Gắn I2 Localize lên Title hai nửa; term lấy từ ô Term của marker GGTab trên từng tab"));
+            if (EditorGUI.EndChangeCheck() && so.ApplyModifiedProperties()) _config.Save();
+            _EndGroup();
+
+            _BeginGroup("Tab", "GameObject gốc của tab (có Button)");
+            _PresetRow(so, tp, nameof(GGTypeBase.rectTransformPreset), "Rect Tab",
+                "File .preset của RectTransform — áp lên tab gốc", () => type.rectTransformPreset,
+                MobUIToolPresetFactory.Slot.Rect, typeof(RectTransform));
+            _PresetRow(so, tp, nameof(GGTypeBase.imagePreset), "Image",
+                "File .preset của Image trên tab gốc (thường là target graphic của Button)", () => type.imagePreset,
+                MobUIToolPresetFactory.Slot.Image, typeof(Image));
+            _PresetRow(so, tp, nameof(GGTabType.layoutElementPreset), "Layout Element",
+                "File .preset của LayoutElement — thiếu thì thêm vào tab gốc", () => type.layoutElementPreset,
+                MobUIToolPresetFactory.Slot.Layout, typeof(LayoutElement));
+            _EndGroup();
+
+            _DrawTabHalf(so, tp, "on", "ON — đang chọn", type.onName, type.on, type);
+            _DrawTabHalf(so, tp, "off", "OFF — chưa chọn", type.offName, type.off, type);
+        }
+
+        private void _DrawTabHalf(SerializedObject so, SerializedProperty tp, string field, string title, string node, GGTabHalf half, GGTabType type)
+        {
+            _BeginGroup(title, $"Node '{node}/{type.imageName}' và '{node}/{type.titleName}'");
+            _PresetRow(so, tp, field + "." + nameof(GGTabHalf.imageRectPreset), "Rect Image",
+                $"RectTransform của {node}/{type.imageName} (giữ vị trí trong tab)", () => half.imageRectPreset,
+                MobUIToolPresetFactory.Slot.Rect, typeof(RectTransform));
+            _PresetRow(so, tp, field + "." + nameof(GGTabHalf.imagePreset), "Image",
+                $"Image của {node}/{type.imageName}", () => half.imagePreset, MobUIToolPresetFactory.Slot.Image, typeof(Image));
+            _PresetRow(so, tp, field + "." + nameof(GGTabHalf.textPreset), "Text",
+                $"Text của {node}/{type.titleName} (không bao giờ ghi nội dung chữ). Là khoá của Rect Text + Outline/Shadow",
+                () => half.textPreset, MobUIToolPresetFactory.Slot.Text, typeof(Text));
+            if (MobUIToolApplier.IsPresetFor(half.textPreset, typeof(Text)))
+            {
+                _PresetRow(so, tp, field + "." + nameof(GGTabHalf.textRectPreset), "Rect Text",
+                    $"RectTransform của {node}/{type.titleName} (giữ vị trí trong tab)", () => half.textRectPreset,
+                    MobUIToolPresetFactory.Slot.TextRect, typeof(RectTransform));
+                _PresetRow(so, tp, field + "." + nameof(GGTabHalf.effectPreset), "Outline / Shadow",
+                    "Title giữ đúng 1 component kiểu đó, xoá kiểu còn lại. Để trống = xoá cả hai",
+                    () => half.effectPreset, MobUIToolPresetFactory.Slot.Effect, typeof(Outline), typeof(Shadow));
             }
             _EndGroup();
         }
@@ -422,7 +499,9 @@ namespace Mob404.Common.UITemplate.Editor
                 _ShowPresetMenu(path, componentTypes);
             if (GUILayout.Button(new GUIContent("+", "Tạo preset từ object đang chọn trong Hierarchy (tự đặt tên, lưu vào Presets/) và gắn vào ô này"), EditorStyles.miniButton, GUILayout.Width(22)))
             {
-                var created = MobUIToolPresetFactory.CreateFromSelection(_config, slot, _IsImageTab, out _message);
+                var created = _IsTabTab
+                    ? MobUIToolPresetFactory.CreateForTab(_config, slot, componentTypes[0], field == nameof(GGTypeBase.rectTransformPreset), out _message)
+                    : MobUIToolPresetFactory.CreateFromSelection(_config, slot, _IsImageTab, out _message);
                 if (created != null)
                 {
                     _SetPreset(path, created);
@@ -431,7 +510,8 @@ namespace Mob404.Common.UITemplate.Editor
             }
             EditorGUILayout.EndHorizontal();
 
-            _DrawPresetInfo(current(), label, componentTypes);
+            // Node con của tab giữ vị trí tương đối trong tab — chỉ Rect của tab gốc mới cần cảnh báo vị trí.
+            _DrawPresetInfo(current(), label, !_IsTabTab || field == nameof(GGTypeBase.rectTransformPreset), componentTypes);
         }
 
         private void _ShowPresetMenu(string propertyPath, System.Type[] componentTypes)
@@ -468,7 +548,7 @@ namespace Mob404.Common.UITemplate.Editor
         }
 
         /// <summary>Báo preset Missing / sai kiểu / rỗng / Rect còn vị trí. Ô trống hoặc preset hợp lệ thì không hiện gì.</summary>
-        private static void _DrawPresetInfo(Preset preset, string label, System.Type[] componentTypes)
+        private static void _DrawPresetInfo(Preset preset, string label, bool warnPosition, System.Type[] componentTypes)
         {
             if (MobUIToolApplier.IsMissing(preset))
             {
@@ -495,7 +575,7 @@ namespace Mob404.Common.UITemplate.Editor
                 return;
             }
 
-            if (MobUIToolApplier.IsPresetFor(preset, typeof(RectTransform)) && MobUIToolApplier.TouchesPosition(preset))
+            if (warnPosition && MobUIToolApplier.IsPresetFor(preset, typeof(RectTransform)) && MobUIToolApplier.TouchesPosition(preset))
             {
                 EditorGUILayout.BeginHorizontal();
                 EditorGUILayout.HelpBox($"{label}: preset còn áp vị trí — Apply sẽ dời mọi đối tượng về cùng một chỗ.", MessageType.Warning);
@@ -509,7 +589,10 @@ namespace Mob404.Common.UITemplate.Editor
         private void _DrawActions(GGTypeBase type)
         {
             var buttonType = type as GGButtonType;
-            bool canApply = (buttonType != null && MobUIToolApplier.HasTextKey(buttonType)) ||
+            if (type is GGTabType tabType) _DrawTabAttach(tabType);
+            // Tab: Sync structure + Localize luôn có việc để làm, kể cả khi chưa gắn preset nào.
+            bool canApply = type is GGTabType ||
+                            (buttonType != null && MobUIToolApplier.HasTextKey(buttonType)) ||
                             MobUIToolApplier.HasValues(type.rectTransformPreset, typeof(RectTransform)) ||
                             MobUIToolApplier.HasValues(type.imagePreset, typeof(Image));
 
@@ -537,6 +620,21 @@ namespace Mob404.Common.UITemplate.Editor
             EditorGUILayout.EndHorizontal();
         }
 
+        /// <summary>Gắn marker GGTab của loại lên tab chứa các object đang chọn trong Hierarchy (cho tab cấu trúc cũ, Scan không nhận ra).</summary>
+        private void _DrawTabAttach(GGTabType type)
+        {
+            using (new EditorGUI.DisabledScope(_InPlayMode || Selection.gameObjects.Length == 0))
+            {
+                if (GUILayout.Button(new GUIContent($"Attach to selection ({Selection.gameObjects.Length})",
+                        "Gắn GGTab của loại này lên tab (GameObject có Button) chứa từng object đang chọn trong Hierarchy. Undo được; lưu scene/prefab rồi Refresh."),
+                        GUILayout.Height(22)))
+                {
+                    MobUIToolScanner.AttachToSelection(type, Selection.gameObjects, out _message);
+                    Debug.Log("[MobUITool] " + _message);
+                }
+            }
+        }
+
         private void _Apply(GGTypeBase type)
         {
             if (!MobUIToolAssetUtil.SaveOpenEditorsIfUserWantsTo()) return;
@@ -546,7 +644,9 @@ namespace Mob404.Common.UITemplate.Editor
 
             string removeNote = type is GGButtonType bt && MobUIToolApplier.HasTextKey(bt) && MobUIToolApplier.IsEmpty(bt.effectPreset)
                 ? "\n\nÔ Outline / Shadow đang trống → sẽ XOÁ Outline và Shadow khỏi Text của mọi button thuộc loại."
-                : "";
+                : type is GGTabType tt && tt.removeLegacy
+                    ? "\n\nRemove legacy đang BẬT → sẽ XOÁ node/component cũ trong nửa ON/OFF (xem Preview để biết cụ thể)."
+                    : "";
             var dirty = MobUIToolAssetUtil.GitDirty(files);
             string gitNote = dirty == null
                 ? "\n\n(Không kiểm được git status.)"

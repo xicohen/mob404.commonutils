@@ -60,6 +60,43 @@ namespace Mob404.Common.UITemplate.Editor
     {
     }
 
+    /// <summary>
+    /// Loại tab (GameObject có Button, hai nửa ON/OFF — vd TabButton.m_GoOn / m_GoOff). Mỗi nửa gồm một node Image và
+    /// một node Title (Text). Sync structure tạo node còn thiếu theo quy ước tên; rectTransformPreset/imagePreset của
+    /// GGTypeBase áp lên GameObject gốc của tab.
+    /// </summary>
+    [Serializable]
+    public class GGTabType : GGTypeBase
+    {
+        [Tooltip("File .preset của LayoutElement — áp lên GameObject gốc của tab (thiếu LayoutElement thì thêm)")]
+        public Preset layoutElementPreset;
+
+        [Tooltip("Tên node con của tab giữ trạng thái ĐANG CHỌN")] public string onName = "ImageOn";
+        [Tooltip("Tên node con của tab giữ trạng thái CHƯA CHỌN")] public string offName = "ImageOff";
+        [Tooltip("Tên node Image trong mỗi nửa ON/OFF")] public string imageName = "Image";
+        [Tooltip("Tên node Text (Title) trong mỗi nửa ON/OFF")] public string titleName = "Title";
+
+        public GGTabHalf on = new GGTabHalf();
+        public GGTabHalf off = new GGTabHalf();
+
+        [Tooltip("Xoá node/component cũ trong nửa ON/OFF không thuộc quy ước (vd Image trên ImageOn, node 'img'). Node có tham chiếu từ ngoài không bao giờ bị xoá.")]
+        public bool removeLegacy;
+        [Tooltip("Gắn I2 Localize lên Title của hai nửa, đặt term theo ô Term của marker")]
+        public bool attachLocalize = true;
+    }
+
+    /// <summary>Preset của một nửa tab (ON hoặc OFF): node Image + node Title.</summary>
+    [Serializable]
+    public class GGTabHalf
+    {
+        public Preset imageRectPreset;
+        public Preset imagePreset;
+        public Preset textRectPreset;
+        public Preset textPreset;
+        [Tooltip("File .preset của Outline HOẶC Shadow — Title giữ đúng 1 component kiểu đó, xoá kiểu còn lại; ô trống = xoá cả hai")]
+        public Preset effectPreset;
+    }
+
     /// <summary>Prefab/scene chứa trực tiếp marker của một loại, kèm số marker trong file.</summary>
     public class GGLinkedAsset
     {

@@ -13,7 +13,7 @@ namespace Mob404.Common.UITemplate.Editor
     /// </summary>
     public static class MobUIToolPresetFactory
     {
-        public enum Slot { Rect, Image, TextRect, Text, Effect }
+        public enum Slot { Rect, Image, TextRect, Text, Effect, Layout }
 
         /// <summary>Trả về preset vừa tạo, hoặc null (message cho biết lý do).</summary>
         public static Preset CreateFromSelection(MobUIToolConfig config, Slot slot, bool imageTab, out string message)
@@ -74,6 +74,69 @@ namespace Mob404.Common.UITemplate.Editor
             return preset;
         }
 
+        /// <summary>
+        /// Tab "Tab": tạo preset từ component đúng kiểu NGAY TRÊN object đang chọn (chọn đúng node Image/Title của nửa
+        /// ON/OFF, hoặc tab gốc). excludePosition = chỉ ô Rect của tab gốc — node con của tab giữ vị trí tương đối.
+        /// </summary>
+        public static Preset CreateForTab(MobUIToolConfig config, Slot slot, System.Type componentType, bool excludePosition, out string message)
+        {
+            var selected = Selection.activeGameObject;
+            if (selected == null)
+            {
+                message = "Chọn đúng node mẫu trong Hierarchy (tab gốc, hoặc node Image/Title của nửa ON/OFF) trước.";
+                return null;
+            }
+
+            Component component = null;
+            if (slot == Slot.Effect)
+            {
+                foreach (var c in selected.GetComponents<Shadow>())
+                    if (c.GetType() == typeof(Outline)) { component = c; break; }
+                if (component == null)
+                    foreach (var c in selected.GetComponents<Shadow>())
+                        if (c.GetType() == typeof(Shadow)) { component = c; break; }
+            }
+            else component = selected.GetComponent(componentType);
+            if (component == null)
+            {
+                message = $"'{selected.name}' không có {(slot == Slot.Effect ? "Outline/Shadow" : componentType.Name)} — chọn đúng node mẫu.";
+                return null;
+            }
+
+            var preset = new Preset(component);
+            if (excludePosition) preset.excludedProperties = MobUIToolApplier.PositionProperties;
+
+            string folder = $"{System.IO.Path.GetDirectoryName(AssetDatabase.GetAssetPath(config)).Replace('\\', '/')}/Presets/{_Folder(slot)}";
+            MobUIToolConfig.EnsureFolder(folder);
+            string path = AssetDatabase.GenerateUniqueAssetPath($"{folder}/{_TabName(slot, component)}.preset");
+            AssetDatabase.CreateAsset(preset, path);
+            AssetDatabase.SaveAssets();
+            message = $"Đã tạo {path} từ '{component.name}'.";
+            return preset;
+        }
+
+        private static string _TabName(Slot slot, Component c)
+        {
+            switch (slot)
+            {
+                case Slot.Layout:
+                    var le = (LayoutElement)c;
+                    return $"Layout_Tab_{_Num(le.preferredWidth)}x{_Num(le.preferredHeight)}";
+                case Slot.Text:
+                    var text = (Text)c;
+                    return $"Txt_Tab_{text.fontSize}_{_Hex(text.color)}";
+                case Slot.Rect:
+                case Slot.TextRect:
+                    var rt = (RectTransform)c;
+                    return $"Rect_Tab_{Pascal(c.name)}_{_Num(rt.rect.width)}x{_Num(rt.rect.height)}";
+                case Slot.Image:
+                    var image = (Image)c;
+                    return $"Img_Tab_{(image.sprite != null ? Pascal(image.sprite.name) : _Hex(image.color))}";
+                default:
+                    return _Name(slot, c, false);
+            }
+        }
+
         private static GameObject _Root(GameObject selected, bool imageTab)
         {
             if (imageTab)
@@ -98,6 +161,7 @@ namespace Mob404.Common.UITemplate.Editor
                 case Slot.TextRect: return "Rect";
                 case Slot.Image: return "Image";
                 case Slot.Text: return "Text";
+                case Slot.Layout: return "Layout";
                 default: return "Effect";
             }
         }

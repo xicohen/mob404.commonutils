@@ -5,7 +5,7 @@ using UnityEngine;
 namespace Mob404.Common.UITemplate.Editor
 {
     /// <summary>
-    /// Danh sách loại Button (tab Button) và loại Image (tab Image) của project. Nằm trong Assets/ của project
+    /// Danh sách loại Button (tab Button), loại Image (tab Image) và loại Tab (tab Tab) của project. Nằm trong Assets/ của project
     /// (package cài qua git là read-only). Preset là file .preset riêng trong project, config chỉ tham chiếu tới.
     /// </summary>
     public class MobUIToolConfig : ScriptableObject
@@ -14,10 +14,13 @@ namespace Mob404.Common.UITemplate.Editor
 
         public List<GGButtonType> types = new List<GGButtonType>();
         public List<GGImageType> imageTypes = new List<GGImageType>();
+        public List<GGTabType> tabTypes = new List<GGTabType>();
 
         public GGButtonType FindType(string id) => _Find(types, id);
 
         public GGImageType FindImageType(string id) => _Find(imageTypes, id);
+
+        public GGTabType FindTabType(string id) => _Find(tabTypes, id);
 
         private static T _Find<T>(List<T> list, string id) where T : GGTypeBase
         {
