@@ -14,5 +14,10 @@ namespace Mob404.Common.UITemplate
         public string typeId;
         public Image image;
         public Text text;
+
+        [Tooltip("Icon giá (vd IconCost) — chỉ dùng với loại có khối Cost. Trống = tự nhận diện lúc Apply")]
+        public Image costIcon;
+        [Tooltip("Text giá nằm trong icon (vd TextCost) — chỉ dùng với loại có khối Cost. Trống = tự nhận diện lúc Apply")]
+        public Text costText;
     }
 }

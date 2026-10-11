@@ -50,6 +50,8 @@ namespace Mob404.Common.UITemplate.Editor
 
             EditorGUILayout.PropertyField(serializedObject.FindProperty("image"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("text"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("costIcon"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("costText"));
             serializedObject.ApplyModifiedProperties();
 
             var selectedType = config != null ? config.FindType(marker.typeId) : null;

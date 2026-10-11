@@ -52,6 +52,19 @@ namespace Mob404.Common.UITemplate.Editor
         [Tooltip("File .preset của Outline HOẶC Shadow — Text con giữ đúng 1 component kiểu đó, xoá kiểu còn lại; ô trống = xoá cả hai")]
         [FormerlySerializedAs("outlinePreset")]
         public Preset effectPreset;
+
+        // Khối Cost (button kèm giá: icon tiền tệ + Text giá nằm trong icon). Icon preset hoặc Text preset là khoá của khối.
+        // Loại có khối Cost không được Scan gắn tự động (trùng sprite với loại thường) — gắn marker bằng tay.
+        [Tooltip("File .preset của RectTransform — áp lên RectTransform của icon giá")]
+        public Preset costIconRectPreset;
+        [Tooltip("File .preset của UnityEngine.UI.Image — áp lên icon giá, KHÔNG BAO GIỜ ghi sprite (đổi lúc chạy theo loại tiền)")]
+        public Preset costIconPreset;
+        [Tooltip("File .preset của RectTransform — áp lên RectTransform của Text giá")]
+        public Preset costTextRectPreset;
+        [Tooltip("File .preset của UnityEngine.UI.Text — áp lên Text giá (không bao giờ ghi nội dung chữ)")]
+        public Preset costTextPreset;
+        [Tooltip("File .preset của Outline HOẶC Shadow cho Text giá; ô trống = xoá cả hai")]
+        public Preset costEffectPreset;
     }
 
     /// <summary>Loại Image: mọi Image dùng sprite nguồn mà chưa thuộc loại Button. Chỉ preset RectTransform/Image.</summary>

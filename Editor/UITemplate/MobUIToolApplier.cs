@@ -35,6 +35,9 @@ namespace Mob404.Common.UITemplate.Editor
         /// </summary>
         public static bool IncludeEnabled;
 
+        /// <summary>Không áp m_Sprite dù preset có chứa — bật trong lúc áp/so icon giá (sprite do code đổi lúc chạy).</summary>
+        public static bool ExcludeSprite;
+
         /// <summary>Cảnh báo phát sinh trong lượt áp; người gọi đọc rồi xoá.</summary>
         public static readonly List<string> Warnings = new List<string>();
 
@@ -46,25 +49,74 @@ namespace Mob404.Common.UITemplate.Editor
         {
             bool changed = _ApplyBase(marker, marker.image, type);
 
+            // Ô Text trên marker trống (marker gắn tay) → tự tìm như lúc Scan.
+            var found = MobUIToolScanner.FindText(marker.transform, out int direct);
+            var text = marker.text != null ? marker.text : found;
+
             // Text preset là khoá của khối Text: không có thì bỏ qua cả Rect Text lẫn Outline/Shadow.
-            if (!HasTextKey(type)) return changed;
-            var text = marker.text;
-            if (text == null)
+            if (HasTextKey(type))
             {
-                Warnings.Add($"'{marker.name}': không có Text — bỏ qua khối Text.");
-                return changed;
+                if (text == null)
+                    Warnings.Add($"'{marker.name}': không có Text — bỏ qua khối Text.");
+                else
+                {
+                    if (direct > 1) Warnings.Add($"'{marker.name}': có {direct} Text con, đang dùng '{text.name}' — kiểm tra ô Text trên marker.");
+                    if (_ApplyTextBlock(type.textRectTransformPreset, type.textPreset, type.effectPreset, text)) changed = true;
+                }
             }
-            MobUIToolScanner.FindText(marker.transform, out int direct);
-            if (direct > 1) Warnings.Add($"'{marker.name}': có {direct} Text con, đang dùng '{text.name}' — kiểm tra ô Text trên marker.");
 
-            if (HasValues(type.textRectTransformPreset, typeof(RectTransform)) &&
-                _ApplyRect(type.textRectTransformPreset, text.rectTransform))
-                changed = true;
-            if (HasValues(type.textPreset, typeof(Text)) && _ApplyPreset(type.textPreset, text))
-                changed = true;
-            if (_SyncEffect(type.effectPreset, text))
-                changed = true;
+            if (HasCostKey(type) && _ApplyCost(marker, type, text)) changed = true;
+            return changed;
+        }
 
+        /// <summary>Rect Text + Text + Outline/Shadow lên một Text.</summary>
+        private static bool _ApplyTextBlock(Preset rectPreset, Preset textPreset, Preset effectPreset, Text text)
+        {
+            bool changed = false;
+            if (HasValues(rectPreset, typeof(RectTransform)) && _ApplyRect(rectPreset, text.rectTransform))
+                changed = true;
+            if (HasValues(textPreset, typeof(Text)) && _ApplyPreset(textPreset, text))
+                changed = true;
+            if (_SyncEffect(effectPreset, text))
+                changed = true;
+            return changed;
+        }
+
+        /// <summary>Khối Cost: icon giá (không bao giờ đổi sprite) + Text giá nằm trong icon.</summary>
+        private static bool _ApplyCost(GGButton marker, GGButtonType type, Text mainText)
+        {
+            MobUIToolScanner.FindCost(marker.transform, mainText, out var foundIcon, out var foundText);
+            var icon = marker.costIcon != null ? marker.costIcon : foundIcon;
+            var costText = marker.costText != null ? marker.costText : foundText;
+            if (icon == null && costText == null)
+            {
+                Warnings.Add($"'{marker.name}': không tìm thấy icon/Text giá — bỏ qua khối Cost (gán tay ô Cost Icon / Cost Text trên marker).");
+                return false;
+            }
+
+            bool changed = false;
+            if (icon != null)
+            {
+                ExcludeSprite = true;
+                try
+                {
+                    if (HasValues(type.costIconRectPreset, typeof(RectTransform)) && _ApplyRect(type.costIconRectPreset, icon.rectTransform))
+                        changed = true;
+                    if (HasValues(type.costIconPreset, typeof(Image)) && _ApplyPreset(type.costIconPreset, icon))
+                        changed = true;
+                }
+                finally
+                {
+                    ExcludeSprite = false;
+                }
+            }
+            else Warnings.Add($"'{marker.name}': không có icon giá — bỏ qua phần icon của khối Cost.");
+
+            if (IsPresetFor(type.costTextPreset, typeof(Text)))
+            {
+                if (costText == null) Warnings.Add($"'{marker.name}': không có Text giá — bỏ qua phần Text của khối Cost.");
+                else if (_ApplyTextBlock(type.costTextRectPreset, type.costTextPreset, type.costEffectPreset, costText)) changed = true;
+            }
             return changed;
         }
 
@@ -73,6 +125,10 @@ namespace Mob404.Common.UITemplate.Editor
 
         /// <summary>Loại có Text preset hợp lệ (đúng kiểu Text) — điều kiện để khối Text được áp.</summary>
         public static bool HasTextKey(GGButtonType type) => IsPresetFor(type.textPreset, typeof(Text));
+
+        /// <summary>Loại có khối Cost (Icon preset hoặc Text preset của khối) — loại này chỉ gắn marker bằng tay, Scan bỏ qua.</summary>
+        public static bool HasCostKey(GGButtonType type) =>
+            IsPresetFor(type.costIconPreset, typeof(Image)) || IsPresetFor(type.costTextPreset, typeof(Text));
 
         /// <summary>Kiểu effect của preset trong ô Outline/Shadow: typeof(Outline), typeof(Shadow), hoặc null nếu không phải hai kiểu đó.</summary>
         public static Type EffectType(Preset preset)
@@ -242,6 +298,7 @@ namespace Mob404.Common.UITemplate.Editor
                 string path = mod.propertyPath;
                 if (_Excluded(path, preset.excludedProperties)) continue;
                 if (_Excluded(path, AlwaysExcluded) && !(IncludeEnabled && path == "m_Enabled")) continue;
+                if (ExcludeSprite && path == "m_Sprite") continue;
                 if (!paths.Contains(path)) paths.Add(path);
             }
             return paths;

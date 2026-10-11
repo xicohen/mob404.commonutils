@@ -87,6 +87,26 @@ namespace Mob404.Common.UITemplate.Editor
                 return null;
             }
 
+            var component = _OnNode(selected, slot, componentType, out message);
+            return component != null ? SaveTabPreset(config, slot, component, excludePosition, out message) : null;
+        }
+
+        /// <summary>Khối Cost của loại Button: tạo preset từ component NGAY TRÊN node đang chọn (icon giá hoặc Text giá).</summary>
+        public static Preset CreateForCost(MobUIToolConfig config, Slot slot, System.Type componentType, out string message)
+        {
+            var selected = Selection.activeGameObject;
+            if (selected == null)
+            {
+                message = "Chọn đúng node mẫu trong Hierarchy (icon giá, vd IconCost, hoặc Text giá, vd TextCost) trước.";
+                return null;
+            }
+            var component = _OnNode(selected, slot, componentType, out message);
+            return component != null ? SaveButtonPreset(config, slot, component, out message) : null;
+        }
+
+        private static Component _OnNode(GameObject selected, Slot slot, System.Type componentType, out string message)
+        {
+            message = null;
             Component component = null;
             if (slot == Slot.Effect)
             {
@@ -98,12 +118,8 @@ namespace Mob404.Common.UITemplate.Editor
             }
             else component = selected.GetComponent(componentType);
             if (component == null)
-            {
                 message = $"'{selected.name}' không có {(slot == Slot.Effect ? "Outline/Shadow" : componentType.Name)} — chọn đúng node mẫu.";
-                return null;
-            }
-
-            return SaveTabPreset(config, slot, component, excludePosition, out message);
+            return component;
         }
 
         /// <summary>

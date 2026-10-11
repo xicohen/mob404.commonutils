@@ -23,6 +23,8 @@ namespace Mob404.Common.UITemplate.Editor
             public MobUIToolPresetFactory.Slot kind;
             public bool rootRect;
             public bool isEffect;
+            /// <summary>Icon giá: so/lưu không tính m_Sprite.</summary>
+            public bool excludeSprite;
             /// <summary>true = ô của loại Tab (đặt tên Rect_Tab_…, Rect node con giữ vị trí); false = loại Button.</summary>
             public bool tab = true;
             public readonly List<string> diffs = new List<string>();
@@ -48,6 +50,8 @@ namespace Mob404.Common.UITemplate.Editor
                 es.isEffect = true;
                 slots.Add(es);
             }
+            // Loại chưa có preset Cost nhưng marker đã gán tay ô Cost → vẫn so, để Save to preset tạo bộ preset Cost đầu tiên.
+            if (MobUIToolApplier.HasCostKey(type) || marker.costIcon != null || marker.costText != null) _AddCost(slots, marker, type, text);
             foreach (var s in slots) s.tab = false;
             try
             {
@@ -59,6 +63,24 @@ namespace Mob404.Common.UITemplate.Editor
             }
             slots.RemoveAll(s => s.component == null && s.preset == null && !s.isEffect);
             return slots;
+        }
+
+        /// <summary>Khối Cost: Rect/Image của icon giá (không tính sprite) + Text/Rect/Outline-Shadow của Text giá.</summary>
+        private static void _AddCost(List<Slot> slots, GGButton marker, GGButtonType type, Text mainText)
+        {
+            MobUIToolScanner.FindCost(marker.transform, mainText, out var foundIcon, out var foundText);
+            var icon = marker.costIcon != null ? marker.costIcon : foundIcon;
+            var costText = marker.costText != null ? marker.costText : foundText;
+            slots.Add(_Slot("Cost — Rect Icon", icon != null ? icon.rectTransform : null, type.costIconRectPreset, p => type.costIconRectPreset = p, MobUIToolPresetFactory.Slot.Rect, true));
+            var iconSlot = _Slot("Cost — Icon", icon, type.costIconPreset, p => type.costIconPreset = p, MobUIToolPresetFactory.Slot.Image);
+            iconSlot.excludeSprite = true;
+            slots.Add(iconSlot);
+            slots.Add(_Slot("Cost — Text", costText, type.costTextPreset, p => type.costTextPreset = p, MobUIToolPresetFactory.Slot.Text));
+            if (costText == null) return;
+            slots.Add(_Slot("Cost — Rect Text", costText.rectTransform, type.costTextRectPreset, p => type.costTextRectPreset = p, MobUIToolPresetFactory.Slot.TextRect, true));
+            var es = _Slot("Cost — Outline / Shadow", _Effect(costText), type.costEffectPreset, p => type.costEffectPreset = p, MobUIToolPresetFactory.Slot.Effect);
+            es.isEffect = true;
+            slots.Add(es);
         }
 
         private static Component _Effect(Text text)
@@ -226,7 +248,15 @@ namespace Mob404.Common.UITemplate.Editor
             }
             if (s.component == null) return;
             if (s.preset == null) { s.diffs.Add("ô preset trống"); return; }
-            s.diffs.AddRange(MobUIToolApplier.Differences(s.preset, s.component));
+            MobUIToolApplier.ExcludeSprite = s.excludeSprite;
+            try
+            {
+                s.diffs.AddRange(MobUIToolApplier.Differences(s.preset, s.component));
+            }
+            finally
+            {
+                MobUIToolApplier.ExcludeSprite = false;
+            }
         }
 
         private static string[] _With(string[] list, string[] add)

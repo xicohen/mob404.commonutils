@@ -26,7 +26,9 @@ namespace Mob404.Common.UITemplate.Editor
             var imageMap = new Dictionary<Sprite, GGImageType>();
             var tabMap = new Dictionary<Sprite, GGTabType>();
             var guids = new HashSet<string>();
-            foreach (var type in config.types) _AddType(type, buttonMap, guids, report);
+            // Loại có khối Cost trùng sprite với loại thường (vd Btn_Yellow) — không gắn tự động, gắn marker bằng tay.
+            foreach (var type in config.types)
+                if (!MobUIToolApplier.HasCostKey(type)) _AddType(type, buttonMap, guids, report);
             foreach (var type in config.imageTypes) _AddType(type, imageMap, guids, report);
             foreach (var type in config.tabTypes)
             {
@@ -132,6 +134,27 @@ namespace Mob404.Common.UITemplate.Editor
             foreach (var t in button.GetComponentsInChildren<Text>(true))
                 if (t.transform != button) return t;
             return null;
+        }
+
+        /// <summary>
+        /// Icon giá + Text giá của button kèm giá: Image con cháu đầu tiên (khác chính button) có chứa một Text khác mainText.
+        /// Nhận diện theo cấu trúc vì tên không thống nhất (IconCost/TextCost, IconGem/TextGem, Coin/Number…).
+        /// </summary>
+        public static void FindCost(Transform button, Text mainText, out Image icon, out Text costText)
+        {
+            icon = null;
+            costText = null;
+            foreach (var image in button.GetComponentsInChildren<Image>(true))
+            {
+                if (image.transform == button) continue;
+                foreach (var t in image.GetComponentsInChildren<Text>(true))
+                {
+                    if (t == mainText) continue;
+                    icon = image;
+                    costText = t;
+                    return;
+                }
+            }
         }
 
         public static string ScriptGuid(Type scriptClass)

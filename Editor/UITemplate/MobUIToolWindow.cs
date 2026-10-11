@@ -360,11 +360,17 @@ namespace Mob404.Common.UITemplate.Editor
             EditorGUILayout.PropertyField(tp.FindPropertyRelative("sourceSprite"), new GUIContent("Source sprite", "Image dùng sprite này sẽ được gắn vào loại khi Scan & Attach"));
             if (EditorGUI.EndChangeCheck() && so.ApplyModifiedProperties()) _config.Save();
 
+            if (type is GGButtonType costType && MobUIToolApplier.HasCostKey(costType))
+            {
+                EditorGUILayout.HelpBox("Loại có khối Cost — Scan & Attach không gắn tự động. Gắn marker GGButton bằng tay rồi chọn loại này.", MessageType.Info);
+                return;
+            }
             if (type.sourceSprite == null)
                 EditorGUILayout.HelpBox("Chưa có sprite nguồn — Scan & Attach sẽ không gắn được đối tượng mới vào loại này.", MessageType.Warning);
             foreach (GGTypeBase other in _List)
             {
                 if (other == type || other.sourceSprite == null || other.sourceSprite != type.sourceSprite) continue;
+                if (other is GGButtonType ob && MobUIToolApplier.HasCostKey(ob)) continue;
                 EditorGUILayout.HelpBox($"Sprite nguồn trùng với loại '{other.name}' — chỉ một loại nhận được đối tượng khi Scan.", MessageType.Warning);
                 break;
             }
@@ -408,6 +414,28 @@ namespace Mob404.Common.UITemplate.Editor
                 _PresetRow(so, tp, nameof(GGButtonType.effectPreset), "Outline / Shadow",
                     "File .preset của Outline hoặc Shadow — Text giữ đúng 1 component kiểu đó, xoá kiểu còn lại. Để trống = xoá cả hai",
                     () => buttonType.effectPreset, MobUIToolPresetFactory.Slot.Effect, typeof(Outline), typeof(Shadow));
+            }
+            _EndGroup();
+
+            // Khối Cost tuỳ chọn: Icon preset hoặc Text preset là khoá. Loại có khối Cost không được Scan gắn tự động.
+            _BeginGroup("Cost", "Button kèm giá: icon tiền tệ + Text giá nằm trong icon. Có khối này thì loại chỉ gắn marker bằng tay. Nút + tạo preset từ đúng node đang chọn (IconCost / TextCost)");
+            _PresetRow(so, tp, nameof(GGButtonType.costIconRectPreset), "Rect Icon",
+                "File .preset của RectTransform — áp lên icon giá", () => buttonType.costIconRectPreset,
+                MobUIToolPresetFactory.Slot.Rect, typeof(RectTransform));
+            _PresetRow(so, tp, nameof(GGButtonType.costIconPreset), "Icon",
+                "File .preset của Image — áp lên icon giá, không bao giờ ghi sprite", () => buttonType.costIconPreset,
+                MobUIToolPresetFactory.Slot.Image, typeof(Image));
+            _PresetRow(so, tp, nameof(GGButtonType.costTextPreset), "Text",
+                "File .preset của Text giá (không bao giờ ghi nội dung chữ)", () => buttonType.costTextPreset,
+                MobUIToolPresetFactory.Slot.Text, typeof(Text));
+            if (MobUIToolApplier.IsPresetFor(buttonType.costTextPreset, typeof(Text)))
+            {
+                _PresetRow(so, tp, nameof(GGButtonType.costTextRectPreset), "Rect Text",
+                    "File .preset của RectTransform — áp lên Text giá", () => buttonType.costTextRectPreset,
+                    MobUIToolPresetFactory.Slot.TextRect, typeof(RectTransform));
+                _PresetRow(so, tp, nameof(GGButtonType.costEffectPreset), "Outline / Shadow",
+                    "File .preset của Outline hoặc Shadow cho Text giá. Để trống = xoá cả hai",
+                    () => buttonType.costEffectPreset, MobUIToolPresetFactory.Slot.Effect, typeof(Outline), typeof(Shadow));
             }
             _EndGroup();
         }
@@ -501,7 +529,9 @@ namespace Mob404.Common.UITemplate.Editor
             {
                 var created = _IsTabTab
                     ? MobUIToolPresetFactory.CreateForTab(_config, slot, componentTypes[0], field == nameof(GGTypeBase.rectTransformPreset), out _message)
-                    : MobUIToolPresetFactory.CreateFromSelection(_config, slot, _IsImageTab, out _message);
+                    : field.StartsWith("cost")
+                        ? MobUIToolPresetFactory.CreateForCost(_config, slot, componentTypes[0], out _message)
+                        : MobUIToolPresetFactory.CreateFromSelection(_config, slot, _IsImageTab, out _message);
                 if (created != null)
                 {
                     _SetPreset(path, created);
