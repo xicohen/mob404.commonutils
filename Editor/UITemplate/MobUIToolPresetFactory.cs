@@ -124,6 +124,21 @@ namespace Mob404.Common.UITemplate.Editor
             return preset;
         }
 
+        /// <summary>Tạo file preset cho một ô của loại Button từ component cho sẵn (Rect bỏ vị trí, đặt tên như nút +).</summary>
+        public static Preset SaveButtonPreset(MobUIToolConfig config, Slot slot, Component component, out string message)
+        {
+            var preset = new Preset(component);
+            if (component is RectTransform) preset.excludedProperties = MobUIToolApplier.PositionProperties;
+
+            string folder = $"{System.IO.Path.GetDirectoryName(AssetDatabase.GetAssetPath(config)).Replace('\\', '/')}/Presets/{_Folder(slot)}";
+            MobUIToolConfig.EnsureFolder(folder);
+            string path = AssetDatabase.GenerateUniqueAssetPath($"{folder}/{_Name(slot, component, false)}.preset");
+            AssetDatabase.CreateAsset(preset, path);
+            AssetDatabase.SaveAssets();
+            message = $"Đã tạo {path} từ '{component.name}'.";
+            return preset;
+        }
+
         /// <summary>Thuộc tính bỏ qua của Rect node con trong tab.</summary>
         public static readonly string[] ChildRectExcluded = { "m_LocalPosition" };
 

@@ -23,7 +23,51 @@ namespace Mob404.Common.UITemplate.Editor
             public MobUIToolPresetFactory.Slot kind;
             public bool rootRect;
             public bool isEffect;
+            /// <summary>true = ô của loại Tab (đặt tên Rect_Tab_…, Rect node con giữ vị trí); false = loại Button.</summary>
+            public bool tab = true;
             public readonly List<string> diffs = new List<string>();
+        }
+
+        /// <summary>
+        /// Loại Button: ô Rect Button / Image trên GameObject của marker; Text / Rect Text / Outline-Shadow trên Text con.
+        /// Không tính bật/tắt (Button giữ quy tắc không đổi m_Enabled).
+        /// </summary>
+        public static List<Slot> BuildButton(GGButton marker, GGButtonType type)
+        {
+            var slots = new List<Slot>();
+            var image = marker.image != null ? marker.image : marker.GetComponent<Image>();
+            var text = marker.text != null ? marker.text : MobUIToolScanner.FindText(marker.transform, out _);
+            slots.Add(_Slot("Button — Rect", marker.transform as RectTransform, type.rectTransformPreset, p => type.rectTransformPreset = p, MobUIToolPresetFactory.Slot.Rect, true));
+            slots.Add(_Slot("Button — Image", image, type.imagePreset, p => type.imagePreset = p, MobUIToolPresetFactory.Slot.Image));
+            slots.Add(_Slot("Text", text, type.textPreset, p => type.textPreset = p, MobUIToolPresetFactory.Slot.Text));
+            // Có Text thì so cả Rect Text + effect: lần Save đầu tạo đủ bộ (Text preset là khoá của khối khi Apply).
+            if (text != null)
+            {
+                slots.Add(_Slot("Text — Rect", text.rectTransform, type.textRectTransformPreset, p => type.textRectTransformPreset = p, MobUIToolPresetFactory.Slot.TextRect, true));
+                var es = _Slot("Text — Outline / Shadow", _Effect(text), type.effectPreset, p => type.effectPreset = p, MobUIToolPresetFactory.Slot.Effect);
+                es.isEffect = true;
+                slots.Add(es);
+            }
+            foreach (var s in slots) s.tab = false;
+            try
+            {
+                foreach (var s in slots) _Diff(s);
+            }
+            finally
+            {
+                MobUIToolApplier.CleanupTemp();
+            }
+            slots.RemoveAll(s => s.component == null && s.preset == null && !s.isEffect);
+            return slots;
+        }
+
+        private static Component _Effect(Text text)
+        {
+            foreach (var c in text.GetComponents<Shadow>())
+                if (c.GetType() == typeof(Outline)) return c;
+            foreach (var c in text.GetComponents<Shadow>())
+                if (c.GetType() == typeof(Shadow)) return c;
+            return null;
         }
 
         /// <summary>Mọi ô preset của loại, gắn với component tương ứng trên tab, kèm danh sách khác biệt.</summary>
@@ -81,7 +125,10 @@ namespace Mob404.Common.UITemplate.Editor
                 if (s.preset == null || typeMismatch || RefCount(config, s.preset) > 1)
                 {
                     string reason = s.preset == null ? "ô trống" : typeMismatch ? "đổi kiểu effect" : "preset dùng chung — tách riêng";
-                    var created = MobUIToolPresetFactory.SaveTabPreset(config, s.kind, s.component, s.rootRect, out string msg);
+                    string msg;
+                    var created = s.tab
+                        ? MobUIToolPresetFactory.SaveTabPreset(config, s.kind, s.component, s.rootRect, out msg)
+                        : MobUIToolPresetFactory.SaveButtonPreset(config, s.kind, s.component, out msg);
                     s.set(created);
                     log.Add($"{s.label}: {reason} → {msg}");
                     continue;
@@ -89,8 +136,8 @@ namespace Mob404.Common.UITemplate.Editor
 
                 var excluded = s.preset.excludedProperties ?? new string[0];
                 s.preset.UpdateProperties(s.component);
-                if (s.component is RectTransform && !s.rootRect)
-                    excluded = _With(excluded, MobUIToolPresetFactory.ChildRectExcluded);
+                if (s.component is RectTransform)
+                    excluded = _With(excluded, s.tab && !s.rootRect ? MobUIToolPresetFactory.ChildRectExcluded : MobUIToolApplier.PositionProperties);
                 s.preset.excludedProperties = excluded;
                 EditorUtility.SetDirty(s.preset);
                 AssetDatabase.SaveAssetIfDirty(s.preset);
@@ -172,10 +219,10 @@ namespace Mob404.Common.UITemplate.Editor
         {
             if (s.isEffect)
             {
-                if (s.preset == null && s.component != null) { s.diffs.Add($"Title có {s.component.GetType().Name}, ô preset trống"); return; }
-                if (s.preset != null && s.component == null) { s.diffs.Add("Title không có Outline/Shadow, ô preset có"); return; }
+                if (s.preset == null && s.component != null) { s.diffs.Add($"Text có {s.component.GetType().Name}, ô preset trống"); return; }
+                if (s.preset != null && s.component == null) { s.diffs.Add("Text không có Outline/Shadow, ô preset có"); return; }
                 if (s.preset == null) return;
-                if (!MobUIToolApplier.IsPresetFor(s.preset, s.component.GetType())) { s.diffs.Add($"Title dùng {s.component.GetType().Name}, preset là {s.preset.GetTargetTypeName()}"); return; }
+                if (!MobUIToolApplier.IsPresetFor(s.preset, s.component.GetType())) { s.diffs.Add($"Text dùng {s.component.GetType().Name}, preset là {s.preset.GetTargetTypeName()}"); return; }
             }
             if (s.component == null) return;
             if (s.preset == null) { s.diffs.Add("ô preset trống"); return; }
