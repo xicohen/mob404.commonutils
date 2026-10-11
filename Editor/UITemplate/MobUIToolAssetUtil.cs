@@ -180,6 +180,19 @@ namespace Mob404.Common.UITemplate.Editor
                 return Result.Skipped;
             }
 
+            // Prefab đang mở trong Prefab Mode (đã lưu): áp thẳng lên bản đang mở rồi lưu từ đó — nếu ghi vào file qua
+            // LoadPrefabContents, Prefab Mode vẫn giữ bản cũ trong bộ nhớ và lần Ctrl+S sau sẽ ghi đè kết quả.
+            if (stage != null && stage.assetPath == path)
+            {
+                if (!action(new[] { stage.prefabContentsRoot })) return Result.Unchanged;
+                if (save)
+                {
+                    PrefabUtility.SaveAsPrefabAsset(stage.prefabContentsRoot, path);
+                    stage.ClearDirtiness();
+                }
+                return Result.Changed;
+            }
+
             var root = PrefabUtility.LoadPrefabContents(path);
             try
             {
