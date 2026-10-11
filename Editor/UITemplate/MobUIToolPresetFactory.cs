@@ -103,8 +103,17 @@ namespace Mob404.Common.UITemplate.Editor
                 return null;
             }
 
+            return SaveTabPreset(config, slot, component, excludePosition, out message);
+        }
+
+        /// <summary>
+        /// Tạo file preset cho một ô của loại Tab từ component cho sẵn. rootRect = Rect của tab gốc (bỏ cả vị trí);
+        /// Rect node con giữ m_AnchoredPosition nhưng bỏ m_LocalPosition (Unity tự tính lại, lưu vào preset chỉ gây lệch giả).
+        /// </summary>
+        public static Preset SaveTabPreset(MobUIToolConfig config, Slot slot, Component component, bool rootRect, out string message)
+        {
             var preset = new Preset(component);
-            if (excludePosition) preset.excludedProperties = MobUIToolApplier.PositionProperties;
+            if (component is RectTransform) preset.excludedProperties = rootRect ? MobUIToolApplier.PositionProperties : ChildRectExcluded;
 
             string folder = $"{System.IO.Path.GetDirectoryName(AssetDatabase.GetAssetPath(config)).Replace('\\', '/')}/Presets/{_Folder(slot)}";
             MobUIToolConfig.EnsureFolder(folder);
@@ -114,6 +123,9 @@ namespace Mob404.Common.UITemplate.Editor
             message = $"Đã tạo {path} từ '{component.name}'.";
             return preset;
         }
+
+        /// <summary>Thuộc tính bỏ qua của Rect node con trong tab.</summary>
+        public static readonly string[] ChildRectExcluded = { "m_LocalPosition" };
 
         private static string _TabName(Slot slot, Component c)
         {

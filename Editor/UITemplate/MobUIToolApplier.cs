@@ -29,6 +29,12 @@ namespace Mob404.Common.UITemplate.Editor
         /// <summary>Ghi qua Undo (nút Apply only trên Inspector). Áp hàng loạt thì tắt.</summary>
         public static bool UseUndo;
 
+        /// <summary>
+        /// Áp cả m_Enabled (bật/tắt component) có trong preset. Loại Tab bật cờ này trong lúc áp; Button/Image giữ quy tắc cũ
+        /// (không bao giờ đổi bật/tắt).
+        /// </summary>
+        public static bool IncludeEnabled;
+
         /// <summary>Cảnh báo phát sinh trong lượt áp; người gọi đọc rồi xoá.</summary>
         public static readonly List<string> Warnings = new List<string>();
 
@@ -234,7 +240,8 @@ namespace Mob404.Common.UITemplate.Editor
             foreach (var mod in preset.PropertyModifications)
             {
                 string path = mod.propertyPath;
-                if (_Excluded(path, AlwaysExcluded) || _Excluded(path, preset.excludedProperties)) continue;
+                if (_Excluded(path, preset.excludedProperties)) continue;
+                if (_Excluded(path, AlwaysExcluded) && !(IncludeEnabled && path == "m_Enabled")) continue;
                 if (!paths.Contains(path)) paths.Add(path);
             }
             return paths;
@@ -247,6 +254,67 @@ namespace Mob404.Common.UITemplate.Editor
             foreach (var mod in preset.PropertyModifications)
                 if (mod.propertyPath == "m_Sprite") return mod.objectReference as Sprite;
             return null;
+        }
+
+        /// <summary>
+        /// Thuộc tính mà preset sẽ đổi trên target (giá trị hiện tại khác giá trị preset) — không sửa gì.
+        /// Mỗi phần tử: "đường dẫn: hiện tại → preset".
+        /// </summary>
+        public static List<string> Differences(Preset preset, Component target)
+        {
+            var result = new List<string>();
+            if (preset == null || target == null) return result;
+            var temp = _TempComponent(target.GetType());
+            EditorUtility.CopySerialized(target, temp);
+            preset.ApplyTo(temp);
+            var src = new SerializedObject(temp);
+            var dst = new SerializedObject(target);
+            foreach (string path in AppliedPaths(preset))
+            {
+                if (IsLayoutDriven(target, path)) continue;
+                var from = src.FindProperty(path);
+                var to = dst.FindProperty(path);
+                if (from == null || to == null || SerializedProperty.DataEquals(from, to)) continue;
+                // Bỏ qua chênh lệch số thực rất nhỏ (sai số làm tròn của layout).
+                if (from.propertyType == SerializedPropertyType.Float && Mathf.Abs(from.floatValue - to.floatValue) < 0.001f) continue;
+                result.Add($"{path}: {_Show(to)} → {_Show(from)}");
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Thuộc tính RectTransform do LayoutGroup của cha điều khiển (anchor, vị trí; kích thước theo childControl/Grid) —
+        /// áp hay so đều vô nghĩa vì layout tính lại ngay. LayoutElement.ignoreLayout = không bị điều khiển.
+        /// </summary>
+        public static bool IsLayoutDriven(Component target, string path)
+        {
+            if (!(target is RectTransform rt) || rt.parent == null) return false;
+            var group = rt.parent.GetComponent<LayoutGroup>();
+            if (group == null || !group.enabled) return false;
+            var element = rt.GetComponent<LayoutElement>();
+            if (element != null && element.ignoreLayout) return false;
+            if (path.StartsWith("m_AnchorMin") || path.StartsWith("m_AnchorMax") ||
+                path.StartsWith("m_AnchoredPosition") || path.StartsWith("m_LocalPosition")) return true;
+            if (!path.StartsWith("m_SizeDelta")) return false;
+            if (group is GridLayoutGroup) return true;
+            if (group is HorizontalOrVerticalLayoutGroup h)
+                return path == "m_SizeDelta" || (path == "m_SizeDelta.x" && h.childControlWidth) || (path == "m_SizeDelta.y" && h.childControlHeight);
+            return false;
+        }
+
+        private static string _Show(SerializedProperty p)
+        {
+            switch (p.propertyType)
+            {
+                case SerializedPropertyType.ObjectReference: return p.objectReferenceValue != null ? p.objectReferenceValue.name : "None";
+                case SerializedPropertyType.Float: return p.floatValue.ToString("0.##");
+                case SerializedPropertyType.Integer: return p.intValue.ToString();
+                case SerializedPropertyType.Boolean: return p.boolValue ? "bật" : "tắt";
+                case SerializedPropertyType.String: return "\"" + p.stringValue + "\"";
+                case SerializedPropertyType.Enum: return p.enumValueIndex >= 0 && p.enumValueIndex < p.enumDisplayNames.Length ? p.enumDisplayNames[p.enumValueIndex] : p.intValue.ToString();
+                case SerializedPropertyType.Color: return "#" + ColorUtility.ToHtmlStringRGBA(p.colorValue);
+                default: return p.propertyType.ToString();
+            }
         }
 
         /// <summary>Huỷ GameObject tạm dùng để áp preset. Gọi khi xong một lượt.</summary>
@@ -282,6 +350,7 @@ namespace Mob404.Common.UITemplate.Editor
             var revert = new List<string>();
             foreach (string path in AppliedPaths(preset))
             {
+                if (IsLayoutDriven(target, path)) continue;
                 var from = src.FindProperty(path);
                 var to = dst.FindProperty(path);
                 if (from == null || to == null) continue;

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -59,6 +60,8 @@ namespace Mob404.Common.UITemplate.Editor
             serializedObject.ApplyModifiedProperties();
 
             var selectedType = config != null ? config.FindTabType(marker.typeId) : null;
+            if (selectedType != null && targets.Length == 1) _DrawChanges(config, marker, selectedType);
+
             EditorGUILayout.Space();
             EditorGUILayout.BeginHorizontal();
             using (new EditorGUI.DisabledScope(selectedType == null || EditorApplication.isPlayingOrWillChangePlaymode))
@@ -92,6 +95,68 @@ namespace Mob404.Common.UITemplate.Editor
             EditorGUILayout.HelpBox(
                 "Tab đổi loại hoặc gắn tay sẽ vào danh sách của loại sau khi lưu scene/prefab và bấm \"Refresh\" trong cửa sổ.",
                 MessageType.None);
+        }
+
+        private bool _showChanges = true;
+
+        /// <summary>
+        /// Tự so tab với preset của loại (kể cả bật/tắt component). Có khác → liệt kê + nút lưu ngược vào preset,
+        /// hoặc lưu rồi áp cho mọi tab của loại.
+        /// </summary>
+        private void _DrawChanges(MobUIToolConfig config, GGTab marker, GGTabType type)
+        {
+            var slots = MobUIToolTabCapture.Build(marker, type);
+            int total = MobUIToolTabCapture.CountDiffs(slots);
+            EditorGUILayout.Space();
+            if (total == 0)
+            {
+                EditorGUILayout.HelpBox($"Tab khớp preset của loại '{type.name}'.", MessageType.None);
+                return;
+            }
+
+            EditorGUILayout.HelpBox($"Tab đang khác preset của loại '{type.name}' ở {total} chỗ. Apply loại lúc này sẽ GHI ĐÈ tab về preset — " +
+                                    "bấm \"Save to preset\" nếu muốn giữ chỉnh sửa này làm chuẩn.", MessageType.Warning);
+            _showChanges = EditorGUILayout.Foldout(_showChanges, "Khác biệt (tab hiện tại → preset)", true);
+            if (_showChanges)
+            {
+                EditorGUI.indentLevel++;
+                foreach (var s in slots)
+                {
+                    if (s.diffs.Count == 0) continue;
+                    EditorGUILayout.LabelField(s.label + (s.preset != null ? $"  ({s.preset.name})" : ""), EditorStyles.miniBoldLabel);
+                    EditorGUI.indentLevel++;
+                    foreach (var d in s.diffs) EditorGUILayout.LabelField(d, EditorStyles.wordWrappedMiniLabel);
+                    EditorGUI.indentLevel--;
+                }
+                EditorGUI.indentLevel--;
+            }
+
+            EditorGUILayout.BeginHorizontal();
+            using (new EditorGUI.DisabledScope(EditorApplication.isPlayingOrWillChangePlaymode))
+            {
+                if (GUILayout.Button(new GUIContent("Save to preset", "Ghi giá trị của tab này vào preset của loại (preset dùng chung với ô khác sẽ được tách file mới). Chưa áp cho tab khác.")))
+                    _Log(MobUIToolTabCapture.Save(config, slots));
+                if (GUILayout.Button(new GUIContent($"Save + Apply all '{type.name}'", "Lưu vào preset rồi áp loại cho mọi tab liên kết (ghi file, không Undo)")) &&
+                    EditorUtility.DisplayDialog("MobUITool — Save + Apply",
+                        $"Lưu chỉnh sửa của '{marker.name}' vào preset rồi áp loại '{type.name}' cho mọi tab liên kết?\n\nKhông Undo được — nên commit git trước.",
+                        "Save + Apply", "Cancel"))
+                {
+                    _Log(MobUIToolTabCapture.Save(config, slots));
+                    if (MobUIToolAssetUtil.SaveOpenEditorsIfUserWantsTo())
+                    {
+                        var report = MobUIToolBatchApply.Apply(type, false);
+                        Debug.Log("[MobUITool] " + report.Headline);
+                        foreach (var e in report.entries)
+                            foreach (var w in e.warnings) Debug.LogWarning($"[MobUITool] {e.path}: {w}");
+                    }
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private static void _Log(List<string> lines)
+        {
+            foreach (var l in lines) Debug.Log("[MobUITool] " + l);
         }
     }
 }

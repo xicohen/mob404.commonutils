@@ -24,6 +24,15 @@ namespace Mob404.Common.UITemplate.Editor
         /// <summary>Áp loại lên tab. roots = gốc của scene/prefab đang xử lý (để kiểm tham chiếu từ ngoài trước khi xoá node cũ).</summary>
         public static bool ApplyToTab(GGTab marker, GGTabType type, GameObject[] roots)
         {
+            // Tab áp cả bật/tắt component (m_Enabled) theo preset.
+            bool prevEnabled = MobUIToolApplier.IncludeEnabled;
+            MobUIToolApplier.IncludeEnabled = true;
+            try { return _ApplyToTab(marker, type, roots); }
+            finally { MobUIToolApplier.IncludeEnabled = prevEnabled; }
+        }
+
+        private static bool _ApplyToTab(GGTab marker, GGTabType type, GameObject[] roots)
+        {
             bool changed = false;
 
             var rootImage = marker.GetComponent<Image>();
@@ -291,6 +300,15 @@ namespace Mob404.Common.UITemplate.Editor
             prop.stringValue = term;
             if (MobUIToolApplier.UseUndo) so.ApplyModifiedProperties();
             else so.ApplyModifiedPropertiesWithoutUndo();
+
+            // Đã gặp ca Localize vừa thêm trong lượt Apply hàng loạt mà mTerm vẫn trống — đọc lại, lệch thì ghi thẳng field.
+            var field = type.GetField(LOCALIZE_TERM_FIELD);
+            if (field != null && (string)field.GetValue(loc) != term)
+            {
+                if (MobUIToolApplier.UseUndo) Undo.RecordObject(loc, "MobUITool set term");
+                field.SetValue(loc, term);
+                MobUIToolApplier.Warnings.Add($"'{owner}/{text.name}': mTerm không nhận qua SerializedObject — đã ghi thẳng field.");
+            }
             _Record(loc);
             return true;
         }
