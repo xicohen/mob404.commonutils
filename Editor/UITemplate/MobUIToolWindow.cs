@@ -540,8 +540,8 @@ namespace Mob404.Common.UITemplate.Editor
             }
             EditorGUILayout.EndHorizontal();
 
-            // Node con của tab giữ vị trí tương đối trong tab — chỉ Rect của tab gốc mới cần cảnh báo vị trí.
-            _DrawPresetInfo(current(), label, !_IsTabTab || field == nameof(GGTypeBase.rectTransformPreset), componentTypes);
+            // Node con giữ vị trí tương đối trong button/tab — chỉ Rect gốc mới cần cảnh báo vị trí.
+            _DrawPresetInfo(current(), label, field == nameof(GGTypeBase.rectTransformPreset), componentTypes);
         }
 
         private void _ShowPresetMenu(string propertyPath, System.Type[] componentTypes)

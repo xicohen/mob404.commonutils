@@ -62,8 +62,10 @@ namespace Mob404.Common.UITemplate.Editor
             }
 
             var preset = new Preset(component);
-            // Preset Rect mặc định không mang vị trí — áp hàng loạt mà kèm vị trí sẽ dời mọi đối tượng về một chỗ.
-            if (component is RectTransform) preset.excludedProperties = MobUIToolApplier.PositionProperties;
+            // Rect gốc không mang vị trí — áp hàng loạt mà kèm vị trí sẽ dời mọi đối tượng về một chỗ.
+            // Rect Text là node con: giữ vị trí tương đối trong button, chỉ bỏ m_LocalPosition.
+            if (component is RectTransform)
+                preset.excludedProperties = slot == Slot.TextRect ? ChildRectExcluded : MobUIToolApplier.PositionProperties;
 
             string folder = $"{System.IO.Path.GetDirectoryName(AssetDatabase.GetAssetPath(config)).Replace('\\', '/')}/Presets/{_Folder(slot)}";
             MobUIToolConfig.EnsureFolder(folder);
@@ -101,7 +103,7 @@ namespace Mob404.Common.UITemplate.Editor
                 return null;
             }
             var component = _OnNode(selected, slot, componentType, out message);
-            return component != null ? SaveButtonPreset(config, slot, component, out message) : null;
+            return component != null ? SaveButtonPreset(config, slot, component, false, out message) : null;
         }
 
         private static Component _OnNode(GameObject selected, Slot slot, System.Type componentType, out string message)
@@ -140,11 +142,14 @@ namespace Mob404.Common.UITemplate.Editor
             return preset;
         }
 
-        /// <summary>Tạo file preset cho một ô của loại Button từ component cho sẵn (Rect bỏ vị trí, đặt tên như nút +).</summary>
-        public static Preset SaveButtonPreset(MobUIToolConfig config, Slot slot, Component component, out string message)
+        /// <summary>
+        /// Tạo file preset cho một ô của loại Button từ component cho sẵn (đặt tên như nút +). rootRect = Rect của button
+        /// gốc (bỏ cả vị trí); Rect node con (Text, icon/Text giá) giữ m_AnchoredPosition, chỉ bỏ m_LocalPosition.
+        /// </summary>
+        public static Preset SaveButtonPreset(MobUIToolConfig config, Slot slot, Component component, bool rootRect, out string message)
         {
             var preset = new Preset(component);
-            if (component is RectTransform) preset.excludedProperties = MobUIToolApplier.PositionProperties;
+            if (component is RectTransform) preset.excludedProperties = rootRect ? MobUIToolApplier.PositionProperties : ChildRectExcluded;
 
             string folder = $"{System.IO.Path.GetDirectoryName(AssetDatabase.GetAssetPath(config)).Replace('\\', '/')}/Presets/{_Folder(slot)}";
             MobUIToolConfig.EnsureFolder(folder);
@@ -155,7 +160,7 @@ namespace Mob404.Common.UITemplate.Editor
             return preset;
         }
 
-        /// <summary>Thuộc tính bỏ qua của Rect node con trong tab.</summary>
+        /// <summary>Thuộc tính bỏ qua của Rect node con (tab và button).</summary>
         public static readonly string[] ChildRectExcluded = { "m_LocalPosition" };
 
         private static string _TabName(Slot slot, Component c)

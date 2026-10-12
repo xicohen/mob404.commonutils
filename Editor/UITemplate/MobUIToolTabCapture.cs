@@ -45,7 +45,7 @@ namespace Mob404.Common.UITemplate.Editor
             // Có Text thì so cả Rect Text + effect: lần Save đầu tạo đủ bộ (Text preset là khoá của khối khi Apply).
             if (text != null)
             {
-                slots.Add(_Slot("Text — Rect", text.rectTransform, type.textRectTransformPreset, p => type.textRectTransformPreset = p, MobUIToolPresetFactory.Slot.TextRect, true));
+                slots.Add(_Slot("Text — Rect", text.rectTransform, type.textRectTransformPreset, p => type.textRectTransformPreset = p, MobUIToolPresetFactory.Slot.TextRect));
                 var es = _Slot("Text — Outline / Shadow", _Effect(text), type.effectPreset, p => type.effectPreset = p, MobUIToolPresetFactory.Slot.Effect);
                 es.isEffect = true;
                 slots.Add(es);
@@ -71,13 +71,13 @@ namespace Mob404.Common.UITemplate.Editor
             MobUIToolScanner.FindCost(marker.transform, mainText, out var foundIcon, out var foundText);
             var icon = marker.costIcon != null ? marker.costIcon : foundIcon;
             var costText = marker.costText != null ? marker.costText : foundText;
-            slots.Add(_Slot("Cost — Rect Icon", icon != null ? icon.rectTransform : null, type.costIconRectPreset, p => type.costIconRectPreset = p, MobUIToolPresetFactory.Slot.Rect, true));
+            slots.Add(_Slot("Cost — Rect Icon", icon != null ? icon.rectTransform : null, type.costIconRectPreset, p => type.costIconRectPreset = p, MobUIToolPresetFactory.Slot.Rect));
             var iconSlot = _Slot("Cost — Icon", icon, type.costIconPreset, p => type.costIconPreset = p, MobUIToolPresetFactory.Slot.Image);
             iconSlot.excludeSprite = true;
             slots.Add(iconSlot);
             slots.Add(_Slot("Cost — Text", costText, type.costTextPreset, p => type.costTextPreset = p, MobUIToolPresetFactory.Slot.Text));
             if (costText == null) return;
-            slots.Add(_Slot("Cost — Rect Text", costText.rectTransform, type.costTextRectPreset, p => type.costTextRectPreset = p, MobUIToolPresetFactory.Slot.TextRect, true));
+            slots.Add(_Slot("Cost — Rect Text", costText.rectTransform, type.costTextRectPreset, p => type.costTextRectPreset = p, MobUIToolPresetFactory.Slot.TextRect));
             var es = _Slot("Cost — Outline / Shadow", _Effect(costText), type.costEffectPreset, p => type.costEffectPreset = p, MobUIToolPresetFactory.Slot.Effect);
             es.isEffect = true;
             slots.Add(es);
@@ -150,7 +150,7 @@ namespace Mob404.Common.UITemplate.Editor
                     string msg;
                     var created = s.tab
                         ? MobUIToolPresetFactory.SaveTabPreset(config, s.kind, s.component, s.rootRect, out msg)
-                        : MobUIToolPresetFactory.SaveButtonPreset(config, s.kind, s.component, out msg);
+                        : MobUIToolPresetFactory.SaveButtonPreset(config, s.kind, s.component, s.rootRect, out msg);
                     s.set(created);
                     log.Add($"{s.label}: {reason} → {msg}");
                     continue;
@@ -159,7 +159,7 @@ namespace Mob404.Common.UITemplate.Editor
                 var excluded = s.preset.excludedProperties ?? new string[0];
                 s.preset.UpdateProperties(s.component);
                 if (s.component is RectTransform)
-                    excluded = _With(excluded, s.tab && !s.rootRect ? MobUIToolPresetFactory.ChildRectExcluded : MobUIToolApplier.PositionProperties);
+                    excluded = _With(excluded, s.rootRect ? MobUIToolApplier.PositionProperties : MobUIToolPresetFactory.ChildRectExcluded);
                 s.preset.excludedProperties = excluded;
                 EditorUtility.SetDirty(s.preset);
                 AssetDatabase.SaveAssetIfDirty(s.preset);
