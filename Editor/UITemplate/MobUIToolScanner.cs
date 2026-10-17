@@ -25,22 +25,26 @@ namespace Mob404.Common.UITemplate.Editor
             var buttonMap = new Dictionary<Sprite, GGButtonType>();
             var imageMap = new Dictionary<Sprite, GGImageType>();
             var tabMap = new Dictionary<Sprite, GGTabType>();
+            // Sprite thuộc ≥ 2 loại cùng danh mục: không đoán loại, chỉ liệt kê đối tượng để gắn tay.
+            var buttonAmbiguous = new Dictionary<Sprite, List<string>>();
+            var imageAmbiguous = new Dictionary<Sprite, List<string>>();
+            var tabAmbiguous = new Dictionary<Sprite, List<string>>();
             var guids = new HashSet<string>();
             // Loại có khối Cost trùng sprite với loại thường (vd Btn_Yellow) — không gắn tự động, gắn marker bằng tay.
             foreach (var type in config.types)
-                if (!MobUIToolApplier.HasCostKey(type)) _AddType(type, buttonMap, guids, report);
-            foreach (var type in config.imageTypes) _AddType(type, imageMap, guids, report);
+                if (!MobUIToolApplier.HasCostKey(type)) _AddType(type, buttonMap, buttonAmbiguous, guids);
+            foreach (var type in config.imageTypes) _AddType(type, imageMap, imageAmbiguous, guids);
             foreach (var type in config.tabTypes)
             {
-                _AddSprite(type.sourceSprite, type, tabMap, guids, report);
-                _AddSprite(MobUIToolApplier.PresetSprite(type.on.imagePreset), type, tabMap, guids, report);
+                _AddSprite(type.sourceSprite, type, tabMap, tabAmbiguous, guids);
+                _AddSprite(MobUIToolApplier.PresetSprite(type.on.imagePreset), type, tabMap, tabAmbiguous, guids);
             }
 
             EditorUtility.DisplayProgressBar(report.title, "Lọc prefab/scene…", 0f);
             var files = MobUIToolAssetUtil.SortByDependency(
                 MobUIToolAssetUtil.FilterContaining(MobUIToolAssetUtil.AllPrefabsAndScenes(), guids));
 
-            int attachedButtons = 0, attachedImages = 0, attachedTabs = 0;
+            int attachedButtons = 0, attachedImages = 0, attachedTabs = 0, ambiguousCount = 0;
             try
             {
                 for (int i = 0; i < files.Count; i++)
@@ -59,8 +63,9 @@ namespace Mob404.Common.UITemplate.Editor
                         {
                             foreach (var root in roots)
                             {
-                                _AttachTabs(root, config, tabMap, entry, ref attachedTabs);
-                                _Attach(root, config, buttonMap, imageMap, entry, ref attachedButtons, ref attachedImages);
+                                _AttachTabs(root, config, tabMap, tabAmbiguous, entry, ref attachedTabs, ref ambiguousCount);
+                                _Attach(root, config, buttonMap, imageMap, buttonAmbiguous, imageAmbiguous, entry,
+                                    ref attachedButtons, ref attachedImages, ref ambiguousCount);
                             }
                             return entry.objects > 0;
                         }, true, out entry.skipReason);
@@ -78,7 +83,8 @@ namespace Mob404.Common.UITemplate.Editor
             }
 
             RefreshIndex(config);
-            report.summary = $"{files.Count} file, gắn mới {attachedButtons} button + {attachedImages} image + {attachedTabs} tab";
+            report.summary = $"{files.Count} file, gắn mới {attachedButtons} button + {attachedImages} image + {attachedTabs} tab" +
+                             (ambiguousCount > 0 ? $", {ambiguousCount} đối tượng cần chọn loại (sprite dùng chung — xem cảnh báo từng file)" : "");
             return report;
         }
 
@@ -167,27 +173,54 @@ namespace Mob404.Common.UITemplate.Editor
             return null;
         }
 
-        private static void _AddType<T>(T type, Dictionary<Sprite, T> map, HashSet<string> guids, MobUIToolReport report) where T : GGTypeBase
+        private static void _AddType<T>(T type, Dictionary<Sprite, T> map, Dictionary<Sprite, List<string>> ambiguous, HashSet<string> guids) where T : GGTypeBase
         {
-            _AddSprite(type.sourceSprite, type, map, guids, report);
+            _AddSprite(type.sourceSprite, type, map, ambiguous, guids);
             // Đối tượng đã được áp Image preset mang sprite của preset — vẫn phải nhận ra là cùng loại.
-            _AddSprite(MobUIToolApplier.PresetSprite(type.imagePreset), type, map, guids, report);
+            _AddSprite(MobUIToolApplier.PresetSprite(type.imagePreset), type, map, ambiguous, guids);
         }
 
-        private static void _AddSprite<T>(Sprite sprite, T type, Dictionary<Sprite, T> map, HashSet<string> guids, MobUIToolReport report) where T : GGTypeBase
+        /// <summary>
+        /// Sprite → loại. Sprite đã thuộc loại khác thì chuyển sang danh sách mơ hồ (kèm tên các loại ứng viên): Scan không
+        /// gắn đối tượng dùng sprite đó, tránh gắn nhầm theo thứ tự config.
+        /// </summary>
+        private static void _AddSprite<T>(Sprite sprite, T type, Dictionary<Sprite, T> map, Dictionary<Sprite, List<string>> ambiguous,
+            HashSet<string> guids) where T : GGTypeBase
         {
             if (sprite == null) return;
+            if (ambiguous.TryGetValue(sprite, out var names))
+            {
+                if (!names.Contains(type.name)) names.Add(type.name);
+                return;
+            }
             if (map.TryGetValue(sprite, out var other) && other != type)
             {
-                report.warnings.Add($"Sprite '{sprite.name}' nằm trong cả loại '{other.name}' và '{type.name}' — dùng '{other.name}'.");
+                map.Remove(sprite);
+                ambiguous[sprite] = new List<string> { other.name, type.name };
                 return;
             }
             map[sprite] = type;
             if (AssetDatabase.TryGetGUIDAndLocalFileIdentifier(sprite, out string guid, out long _)) guids.Add(guid);
         }
 
+        private static void _Ambiguous(MobUIToolReport.Entry entry, Transform node, string kind, List<string> candidates, ref int ambiguousCount)
+        {
+            entry.warnings.Add($"Cần chọn loại {kind}: '{_Path(node)}' — sprite dùng chung bởi {string.Join(", ", candidates)}. " +
+                               (kind == "Tab" ? "Chọn tab rồi Attach to selection." : "Gắn marker bằng tay rồi chọn loại ở Inspector."));
+            ambiguousCount++;
+        }
+
+        private static string _Path(Transform t)
+        {
+            string path = t.name;
+            for (var p = t.parent; p != null; p = p.parent) path = p.name + "/" + path;
+            return path;
+        }
+
         private static void _Attach(GameObject root, MobUIToolConfig config, Dictionary<Sprite, GGButtonType> buttonMap,
-            Dictionary<Sprite, GGImageType> imageMap, MobUIToolReport.Entry entry, ref int attachedButtons, ref int attachedImages)
+            Dictionary<Sprite, GGImageType> imageMap, Dictionary<Sprite, List<string>> buttonAmbiguous,
+            Dictionary<Sprite, List<string>> imageAmbiguous, MobUIToolReport.Entry entry,
+            ref int attachedButtons, ref int attachedImages, ref int ambiguousCount)
         {
             foreach (var image in root.GetComponentsInChildren<Image>(true))
             {
@@ -201,7 +234,10 @@ namespace Mob404.Common.UITemplate.Editor
                 if (imageMarker != null && config.FindImageType(imageMarker.typeId) != null) continue;
 
                 // Loại Button chỉ nhận Image có Button cùng GameObject; còn lại rơi xuống loại Image (nếu có).
-                if (image.GetComponent<Button>() != null && buttonMap.TryGetValue(image.sprite, out var buttonType))
+                bool hasButton = image.GetComponent<Button>() != null;
+                if (hasButton && buttonAmbiguous.TryGetValue(image.sprite, out var buttonCandidates))
+                    _Ambiguous(entry, image.transform, "Button", buttonCandidates, ref ambiguousCount);
+                else if (hasButton && buttonMap.TryGetValue(image.sprite, out var buttonType))
                 {
                     _RemoveOrphan(imageMarker);
                     if (buttonMarker == null) buttonMarker = image.gameObject.AddComponent<GGButton>();
@@ -212,6 +248,8 @@ namespace Mob404.Common.UITemplate.Editor
                     attachedButtons++;
                     entry.objects++;
                 }
+                else if (imageAmbiguous.TryGetValue(image.sprite, out var imageCandidates))
+                    _Ambiguous(entry, image.transform, "Image", imageCandidates, ref ambiguousCount);
                 else if (imageMap.TryGetValue(image.sprite, out var imageType))
                 {
                     _RemoveOrphan(buttonMarker);
@@ -230,16 +268,25 @@ namespace Mob404.Common.UITemplate.Editor
         /// Tab cấu trúc cũ chưa dùng sprite đó → gắn tay bằng "Attach to selection".
         /// </summary>
         private static void _AttachTabs(GameObject root, MobUIToolConfig config, Dictionary<Sprite, GGTabType> tabMap,
-            MobUIToolReport.Entry entry, ref int attachedTabs)
+            Dictionary<Sprite, List<string>> tabAmbiguous, MobUIToolReport.Entry entry, ref int attachedTabs, ref int ambiguousCount)
         {
-            if (tabMap.Count == 0) return;
+            if (tabMap.Count == 0 && tabAmbiguous.Count == 0) return;
+            var reported = new HashSet<GameObject>();
             foreach (var image in root.GetComponentsInChildren<Image>(true))
             {
-                if (image.sprite == null || !tabMap.TryGetValue(image.sprite, out var tabType)) continue;
+                if (image.sprite == null) continue;
+                tabAmbiguous.TryGetValue(image.sprite, out var candidates);
+                GGTabType tabType = null;
+                if (candidates == null && !tabMap.TryGetValue(image.sprite, out tabType)) continue;
                 var tabRoot = MobUIToolTabApplier.TabRoot(image.gameObject);
                 if (tabRoot == null) continue;
                 var marker = tabRoot.GetComponent<GGTab>();
                 if (marker != null && config.FindTabType(marker.typeId) != null) continue;
+                if (candidates != null)
+                {
+                    if (reported.Add(tabRoot)) _Ambiguous(entry, tabRoot.transform, "Tab", candidates, ref ambiguousCount);
+                    continue;
+                }
                 if (marker == null) marker = tabRoot.AddComponent<GGTab>();
                 marker.typeId = tabType.id;
                 _Record(marker);

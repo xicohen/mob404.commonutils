@@ -96,6 +96,21 @@ namespace Mob404.Common.UITemplate.Editor
         public bool removeLegacy;
         [Tooltip("Gắn I2 Localize lên Title của hai nửa, đặt term theo ô Term của marker")]
         public bool attachLocalize = true;
+
+        [Tooltip("Phần phụ của tab (vd chấm thông báo Notify*): node con trực tiếp của tab gốc khớp tiền tố tên. Chỉ áp preset — không tạo, không đổi tên, không bật/tắt GameObject.")]
+        public List<GGTabExtra> extras = new List<GGTabExtra>();
+    }
+
+    /// <summary>
+    /// Phần phụ của tab: node con trực tiếp của tab gốc có tên bắt đầu bằng prefix (vd Notify → NotifyArmor, NotifyShoes).
+    /// Rect giữ cả vị trí/neo/scale trong tab vì vị trí của phần phụ chính là thiết kế.
+    /// </summary>
+    [Serializable]
+    public class GGTabExtra
+    {
+        [Tooltip("Tiền tố tên node con trực tiếp của tab gốc (vd Notify)")] public string prefix;
+        [Tooltip("File .preset của RectTransform — giữ vị trí, neo, scale trong tab")] public Preset rectPreset;
+        [Tooltip("File .preset của Image trên node đó")] public Preset imagePreset;
     }
 
     /// <summary>Preset của một nửa tab (ON hoặc OFF): node Image + node Title.</summary>

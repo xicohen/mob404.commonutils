@@ -357,7 +357,8 @@ namespace Mob404.Common.UITemplate.Editor
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.DelayedTextField(tp.FindPropertyRelative("name"), new GUIContent("Name"));
             EditorGUILayout.LabelField("Id", type.id, EditorStyles.miniLabel);
-            EditorGUILayout.PropertyField(tp.FindPropertyRelative("sourceSprite"), new GUIContent("Source sprite", "Image dùng sprite này sẽ được gắn vào loại khi Scan & Attach"));
+            EditorGUILayout.PropertyField(tp.FindPropertyRelative("sourceSprite"), new GUIContent("Scan sprite (tuỳ chọn)",
+                "Chỉ dùng để Scan & Attach tìm đối tượng CHƯA có marker. Đối tượng đã gắn đi theo loại (Name/Id), không đọc sprite này."));
             if (EditorGUI.EndChangeCheck() && so.ApplyModifiedProperties()) _config.Save();
 
             if (type is GGButtonType costType && MobUIToolApplier.HasCostKey(costType))
@@ -365,15 +366,32 @@ namespace Mob404.Common.UITemplate.Editor
                 EditorGUILayout.HelpBox("Loại có khối Cost — Scan & Attach không gắn tự động. Gắn marker GGButton bằng tay rồi chọn loại này.", MessageType.Info);
                 return;
             }
-            if (type.sourceSprite == null)
-                EditorGUILayout.HelpBox("Chưa có sprite nguồn — Scan & Attach sẽ không gắn được đối tượng mới vào loại này.", MessageType.Warning);
+            // Loại đã có đối tượng liên kết thì không cần sprite quét.
+            if (type.sourceSprite == null && type.linkedAssets.Count == 0)
+                EditorGUILayout.HelpBox("Chưa có scan sprite và chưa liên kết đối tượng nào — gắn bằng Attach to selection, hoặc đặt scan sprite rồi Scan & Attach.", MessageType.Info);
+
+            // Trùng khoá quét (sprite nguồn hoặc sprite trong Image preset) không gây gắn nhầm: Scan bỏ qua đối tượng mơ hồ.
+            var mine = _ScanSprites(type);
             foreach (GGTypeBase other in _List)
             {
-                if (other == type || other.sourceSprite == null || other.sourceSprite != type.sourceSprite) continue;
-                if (other is GGButtonType ob && MobUIToolApplier.HasCostKey(ob)) continue;
-                EditorGUILayout.HelpBox($"Sprite nguồn trùng với loại '{other.name}' — chỉ một loại nhận được đối tượng khi Scan.", MessageType.Warning);
+                if (other == type || other is GGButtonType ob && MobUIToolApplier.HasCostKey(ob)) continue;
+                var shared = _ScanSprites(other).Find(mine.Contains);
+                if (shared == null) continue;
+                EditorGUILayout.LabelField($"Dùng chung sprite quét '{shared.name}' với '{other.name}' — Scan không tự gắn đối tượng mới có sprite này; dùng Attach to selection.",
+                    EditorStyles.wordWrappedMiniLabel);
                 break;
             }
+        }
+
+        /// <summary>Sprite Scan dùng để nhận đối tượng của loại: sprite nguồn + sprite trong Image preset (nửa ON với loại Tab).</summary>
+        private static List<Sprite> _ScanSprites(GGTypeBase type)
+        {
+            var list = new List<Sprite>();
+            if (type.sourceSprite != null) list.Add(type.sourceSprite);
+            var preset = type is GGTabType tab ? tab.on.imagePreset : type.imagePreset;
+            var presetSprite = MobUIToolApplier.PresetSprite(preset);
+            if (presetSprite != null && !list.Contains(presetSprite)) list.Add(presetSprite);
+            return list;
         }
 
         /// <summary>
@@ -473,6 +491,74 @@ namespace Mob404.Common.UITemplate.Editor
 
             _DrawTabHalf(so, tp, "on", "ON — đang chọn", type.onName, type.on, type);
             _DrawTabHalf(so, tp, "off", "OFF — chưa chọn", type.offName, type.off, type);
+            _DrawTabExtras(so, tp, type);
+        }
+
+        /// <summary>
+        /// Phần phụ của tab (vd Notify*): mỗi dòng một tiền tố + preset Rect/Image. "+ Add" lấy node phụ đang chọn làm mẫu.
+        /// </summary>
+        private void _DrawTabExtras(SerializedObject so, SerializedProperty tp, GGTabType type)
+        {
+            _BeginGroup("Extras", "Node con trực tiếp của tab gốc theo tiền tố tên (vd Notify → NotifyArmor). " +
+                                  "Chỉ áp preset: không tạo, không đổi tên, không bật/tắt GameObject.");
+            var list = tp.FindPropertyRelative(nameof(GGTabType.extras));
+            for (int i = 0; i < list.arraySize; i++)
+            {
+                string f = $"{nameof(GGTabType.extras)}.Array.data[{i}]";
+                var extra = type.extras[i];
+                EditorGUILayout.BeginHorizontal();
+                EditorGUI.BeginChangeCheck();
+                EditorGUILayout.PropertyField(tp.FindPropertyRelative(f + "." + nameof(GGTabExtra.prefix)),
+                    new GUIContent("Prefix", "Node con trực tiếp của tab có tên bắt đầu bằng chuỗi này (vd Notify)"));
+                if (EditorGUI.EndChangeCheck() && so.ApplyModifiedProperties()) _config.Save();
+                if (GUILayout.Button(new GUIContent("−", "Bỏ phần phụ này khỏi loại (không xoá file preset, không đụng node)"), EditorStyles.miniButton, GUILayout.Width(22)))
+                {
+                    list.DeleteArrayElementAtIndex(i);
+                    if (so.ApplyModifiedProperties()) _config.Save();
+                    GUIUtility.ExitGUI();
+                }
+                EditorGUILayout.EndHorizontal();
+                _PresetRow(so, tp, f + "." + nameof(GGTabExtra.rectPreset), "Rect",
+                    $"RectTransform của {extra.prefix}* (giữ vị trí, neo, scale trong tab)", () => extra.rectPreset,
+                    MobUIToolPresetFactory.Slot.Rect, typeof(RectTransform));
+                _PresetRow(so, tp, f + "." + nameof(GGTabExtra.imagePreset), "Image",
+                    $"Image của {extra.prefix}*", () => extra.imagePreset, MobUIToolPresetFactory.Slot.Image, typeof(Image));
+                EditorGUILayout.Space(2);
+            }
+            if (GUILayout.Button(new GUIContent("+ Add từ node đang chọn",
+                    "Chọn node phụ mẫu trong Hierarchy (vd TabAccessory/NotifyAccessory): thêm dòng với tiền tố chung của node cùng loại ở các tab anh em, kèm preset Rect + Image")))
+                _AddTabExtra(type);
+            _EndGroup();
+        }
+
+        private void _AddTabExtra(GGTabType type)
+        {
+            var selected = Selection.activeGameObject;
+            var tab = selected != null ? selected.transform.parent : null;
+            if (tab == null || tab.GetComponent<Button>() == null || selected.name == type.onName || selected.name == type.offName)
+            {
+                _message = "Chọn node phụ là con trực tiếp của tab gốc (vd TabAccessory/NotifyAccessory), không phải nửa ON/OFF.";
+                return;
+            }
+
+            string prefix = MobUIToolTabCapture.ExtraPrefix(selected.transform);
+            if (type.extras.Exists(e => e != null && e.prefix == prefix))
+            {
+                _message = $"Loại '{type.name}' đã có phần phụ '{prefix}' — sửa thẳng trên tab rồi dùng Save to preset ở Inspector của GGTab.";
+                return;
+            }
+
+            var extra = new GGTabExtra { prefix = prefix };
+            extra.rectPreset = MobUIToolPresetFactory.SaveTabPreset(_config, MobUIToolPresetFactory.Slot.Rect, selected.transform, false, out var rectMsg);
+            string imageMsg = "không có Image";
+            var image = selected.GetComponent<Image>();
+            if (image != null) extra.imagePreset = MobUIToolPresetFactory.SaveTabPreset(_config, MobUIToolPresetFactory.Slot.Image, image, false, out imageMsg);
+
+            Undo.RecordObject(_config, "MobUITool add tab extra");
+            type.extras.Add(extra);
+            _config.Save();
+            _message = $"Thêm phần phụ '{prefix}' từ '{selected.name}'. {rectMsg} {imageMsg}";
+            GUIUtility.ExitGUI();
         }
 
         private void _DrawTabHalf(SerializedObject so, SerializedProperty tp, string field, string title, string node, GGTabHalf half, GGTabType type)

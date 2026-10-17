@@ -102,6 +102,7 @@ namespace Mob404.Common.UITemplate.Editor
             slots.Add(_Slot("Tab — Layout Element", marker.GetComponent<LayoutElement>(), type.layoutElementPreset, p => type.layoutElementPreset = p, MobUIToolPresetFactory.Slot.Layout));
             _AddHalf(slots, marker, type, true);
             _AddHalf(slots, marker, type, false);
+            foreach (var extra in type.extras) _AddExtra(slots, marker, type, extra);
 
             bool prev = MobUIToolApplier.IncludeEnabled;
             MobUIToolApplier.IncludeEnabled = true;
@@ -193,6 +194,13 @@ namespace Mob404.Common.UITemplate.Editor
                     var half = f.GetValue(obj);
                     if (half != null) n += _Count(half, preset);
                 }
+                else if (f.FieldType == typeof(List<GGTabExtra>))
+                {
+                    var extras = (List<GGTabExtra>)f.GetValue(obj);
+                    if (extras != null)
+                        foreach (var e in extras)
+                            if (e != null) n += _Count(e, preset);
+                }
             }
             return n;
         }
@@ -232,6 +240,58 @@ namespace Mob404.Common.UITemplate.Editor
             var es = _Slot($"{tag} — Outline / Shadow", effect, half.effectPreset, p => half.effectPreset = p, MobUIToolPresetFactory.Slot.Effect);
             es.isEffect = text != null;
             slots.Add(es);
+        }
+
+        /// <summary>Phần phụ: chỉ so khi tab có node khớp tiền tố (tab không có thì không báo "ô preset trống" giả).</summary>
+        private static void _AddExtra(List<Slot> slots, GGTab marker, GGTabType type, GGTabExtra extra)
+        {
+            if (extra == null || string.IsNullOrEmpty(extra.prefix)) return;
+            var node = MobUIToolTabApplier.FindExtra(marker.transform, type, extra.prefix);
+            if (node == null) return;
+            slots.Add(_Slot($"{extra.prefix} — Rect", node, extra.rectPreset, p => extra.rectPreset = p, MobUIToolPresetFactory.Slot.Rect));
+            slots.Add(_Slot($"{extra.prefix} — Image", node.GetComponent<Image>(), extra.imagePreset, p => extra.imagePreset = p, MobUIToolPresetFactory.Slot.Image));
+        }
+
+        /// <summary>
+        /// Tiền tố chung của node phụ: so tên node đang chọn với node con của các tab anh em (vd NotifyAccessory, NotifyArmor,
+        /// NotifyShoes → Notify), cắt về ranh giới từ PascalCase. Không có tab anh em hoặc tiền tố quá ngắn → dùng nguyên tên.
+        /// </summary>
+        public static string ExtraPrefix(Transform node)
+        {
+            var tab = node.parent;
+            var group = tab != null ? tab.parent : null;
+            if (group == null) return node.name;
+
+            string prefix = node.name;
+            bool found = false;
+            foreach (Transform other in group)
+            {
+                if (other == tab || other.GetComponent<Button>() == null) continue;
+                string best = null;
+                foreach (Transform c in other)
+                {
+                    string common = _CommonPrefix(node.name, c.name);
+                    if (best == null || common.Length > best.Length) best = common;
+                }
+                if (best == null || best.Length < 3) continue;
+                prefix = _CommonPrefix(prefix, best);
+                found = true;
+            }
+            // "NotifyA" (Accessory/Armor) → "Notify": lùi tới chỗ tên gốc bắt đầu một từ mới.
+            while (prefix.Length > 0 && prefix.Length < node.name.Length)
+            {
+                char next = node.name[prefix.Length];
+                if (char.IsUpper(next) || char.IsDigit(next) || next == '_') break;
+                prefix = prefix.Substring(0, prefix.Length - 1);
+            }
+            return found && prefix.Length >= 3 ? prefix : node.name;
+        }
+
+        private static string _CommonPrefix(string a, string b)
+        {
+            int n = 0;
+            while (n < a.Length && n < b.Length && a[n] == b[n]) n++;
+            return a.Substring(0, n);
         }
 
         private static Slot _Slot(string label, Component c, Preset preset, Action<Preset> set, MobUIToolPresetFactory.Slot kind, bool rootRect = false) =>

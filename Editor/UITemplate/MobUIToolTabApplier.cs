@@ -46,7 +46,37 @@ namespace Mob404.Common.UITemplate.Editor
 
             if (_Half(marker, type, true, roots)) changed = true;
             if (_Half(marker, type, false, roots)) changed = true;
+            if (_Extras(marker, type)) changed = true;
             return changed;
+        }
+
+        /// <summary>Phần phụ: áp Rect + Image lên node con khớp tiền tố. Không tạo, không đổi tên, không đụng m_IsActive.</summary>
+        private static bool _Extras(GGTab marker, GGTabType type)
+        {
+            bool changed = false;
+            foreach (var extra in type.extras)
+            {
+                if (extra == null || string.IsNullOrEmpty(extra.prefix)) continue;
+                var node = FindExtra(marker.transform, type, extra.prefix);
+                if (node == null) continue;   // tab không có phần phụ này — bình thường, không cảnh báo
+                if (MobUIToolApplier.HasValues(extra.rectPreset, typeof(RectTransform)) && MobUIToolApplier._ApplyRect(extra.rectPreset, node))
+                    changed = true;
+                var image = node.GetComponent<Image>();
+                if (image != null && MobUIToolApplier.HasValues(extra.imagePreset, typeof(Image)) && MobUIToolApplier._ApplyPreset(extra.imagePreset, image))
+                    changed = true;
+            }
+            return changed;
+        }
+
+        /// <summary>Node con trực tiếp đầu tiên của tab có tên bắt đầu bằng prefix (bỏ qua hai nửa ON/OFF).</summary>
+        public static RectTransform FindExtra(Transform tab, GGTabType type, string prefix)
+        {
+            foreach (Transform child in tab)
+            {
+                if (child.name == type.onName || child.name == type.offName) continue;
+                if (child.name.StartsWith(prefix, StringComparison.Ordinal)) return child as RectTransform;
+            }
+            return null;
         }
 
         /// <summary>Tìm tab gốc (GameObject có Button) chứa object đang chọn.</summary>
