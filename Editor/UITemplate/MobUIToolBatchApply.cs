@@ -43,6 +43,11 @@ namespace Mob404.Common.UITemplate.Editor
                             foreach (var marker in root.GetComponentsInChildren<GGTab>(true))
                                 if (marker.typeId == type.id && MobUIToolTabApplier.ApplyToTab(marker, tabType, roots)) n++;
                         }
+                        else if (type is GGBlockType blockType)
+                        {
+                            foreach (var marker in root.GetComponentsInChildren<GGBlock>(true))
+                                if (marker.typeId == type.id && MobUIToolBlockApplier.ApplyToBlock(marker, blockType)) n++;
+                        }
                     }
                     return n;
                 });
@@ -69,7 +74,7 @@ namespace Mob404.Common.UITemplate.Editor
         public static MobUIToolReport RemoveOrphans(MobUIToolConfig config)
         {
             var guids = new List<string>();
-            foreach (var t in new[] { typeof(GGButton), typeof(GGImage), typeof(GGTab) })
+            foreach (var t in new[] { typeof(GGButton), typeof(GGImage), typeof(GGTab), typeof(GGBlock) })
             {
                 string guid = MobUIToolScanner.ScriptGuid(t);
                 if (!string.IsNullOrEmpty(guid)) guids.Add(guid);
@@ -80,7 +85,8 @@ namespace Mob404.Common.UITemplate.Editor
             _Run(report, files, true, (roots, entry) =>
                 _DestroyMarkers(roots, typeof(GGButton), id => config.FindType(id) == null) +
                 _DestroyMarkers(roots, typeof(GGImage), id => config.FindImageType(id) == null) +
-                _DestroyMarkers(roots, typeof(GGTab), id => config.FindTabType(id) == null));
+                _DestroyMarkers(roots, typeof(GGTab), id => config.FindTabType(id) == null) +
+                _DestroyMarkers(roots, typeof(GGBlock), id => config.FindBlockType(id) == null));
             return report;
         }
 
@@ -90,7 +96,7 @@ namespace Mob404.Common.UITemplate.Editor
             foreach (var root in roots)
             foreach (var c in root.GetComponentsInChildren(markerType, true))
             {
-                string id = c is GGButton b ? b.typeId : c is GGImage i ? i.typeId : ((GGTab)c).typeId;
+                string id = c is GGButton b ? b.typeId : c is GGImage i ? i.typeId : c is GGBlock k ? k.typeId : ((GGTab)c).typeId;
                 if (!match(id)) continue;
                 if (PrefabUtility.IsPartOfPrefabInstance(c) && !PrefabUtility.IsAddedComponentOverride(c)) continue;
                 UnityEngine.Object.DestroyImmediate(c);
@@ -99,9 +105,9 @@ namespace Mob404.Common.UITemplate.Editor
             return n;
         }
 
-        /// <summary>Kiểu marker của một loại: GGButton / GGImage / GGTab.</summary>
+        /// <summary>Kiểu marker của một loại: GGButton / GGImage / GGTab / GGBlock.</summary>
         public static Type MarkerType(GGTypeBase type) =>
-            type is GGButtonType ? typeof(GGButton) : type is GGTabType ? typeof(GGTab) : typeof(GGImage);
+            type is GGButtonType ? typeof(GGButton) : type is GGTabType ? typeof(GGTab) : type is GGBlockType ? typeof(GGBlock) : typeof(GGImage);
 
         /// <summary>Chạy action trên từng file (có thanh tiến độ, huỷ được), gom kết quả + cảnh báo vào report.</summary>
         private static void _Run(MobUIToolReport report, List<string> files, bool save, Func<GameObject[], MobUIToolReport.Entry, int> action)

@@ -15,8 +15,11 @@ namespace Mob404.Common.UITemplate.Editor
         public List<GGButtonType> types = new List<GGButtonType>();
         public List<GGImageType> imageTypes = new List<GGImageType>();
         public List<GGTabType> tabTypes = new List<GGTabType>();
+        public List<GGBlockType> blockTypes = new List<GGBlockType>();
 
         public GGButtonType FindType(string id) => _Find(types, id);
+
+        public GGBlockType FindBlockType(string id) => _Find(blockTypes, id);
 
         public GGImageType FindImageType(string id) => _Find(imageTypes, id);
 

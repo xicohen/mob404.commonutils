@@ -95,6 +95,7 @@ namespace Mob404.Common.UITemplate.Editor
             foreach (var t in config.types) { t.linkedAssets.Clear(); if (!string.IsNullOrEmpty(t.id)) byId[t.id] = t; }
             foreach (var t in config.imageTypes) { t.linkedAssets.Clear(); if (!string.IsNullOrEmpty(t.id)) byId[t.id] = t; }
             foreach (var t in config.tabTypes) { t.linkedAssets.Clear(); if (!string.IsNullOrEmpty(t.id)) byId[t.id] = t; }
+            foreach (var t in config.blockTypes) { t.linkedAssets.Clear(); if (!string.IsNullOrEmpty(t.id)) byId[t.id] = t; }
 
             foreach (var path in MobUIToolAssetUtil.AllPrefabsAndScenes())
             {

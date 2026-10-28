@@ -27,7 +27,51 @@ namespace Mob404.Common.UITemplate.Editor
             public bool excludeSprite;
             /// <summary>true = ô của loại Tab (đặt tên Rect_Tab_…, Rect node con giữ vị trí); false = loại Button.</summary>
             public bool tab = true;
+            /// <summary>Ô của loại Block: tên file theo owner (tên loại), Rect gốc bỏ cả neo/pivot.</summary>
+            public bool block;
+            public string owner;
             public readonly List<string> diffs = new List<string>();
+        }
+
+        /// <summary>
+        /// Loại Block: Rect/Image gốc + Rect/Image/Text/Outline-Shadow của từng phần con tìm theo path. Phần chưa có node
+        /// (Apply sẽ tạo/dời) thì bỏ qua. Không tính bật/tắt.
+        /// </summary>
+        public static List<Slot> BuildBlock(GGBlock marker, GGBlockType type)
+        {
+            var slots = new List<Slot>();
+            slots.Add(_Slot("Gốc — Rect", marker.transform as RectTransform, type.rectTransformPreset, p => type.rectTransformPreset = p, MobUIToolPresetFactory.Slot.Rect, true));
+            slots.Add(_Slot("Gốc — Image", marker.GetComponent<Image>(), type.imagePreset, p => type.imagePreset = p, MobUIToolPresetFactory.Slot.Image));
+            foreach (var part in type.parts)
+            {
+                if (part == null || string.IsNullOrEmpty(part.path)) continue;
+                var node = marker.transform.Find(part.path) as RectTransform;
+                if (node == null) continue;
+                var text = node.GetComponent<Text>();
+                slots.Add(_Slot($"{part.path} — Rect", node, part.rectPreset, p => part.rectPreset = p, MobUIToolPresetFactory.Slot.Rect));
+                slots.Add(_Slot($"{part.path} — Image", node.GetComponent<Image>(), part.imagePreset, p => part.imagePreset = p, MobUIToolPresetFactory.Slot.Image));
+                slots.Add(_Slot($"{part.path} — Text", text, part.textPreset, p => part.textPreset = p, MobUIToolPresetFactory.Slot.Text));
+                if (text == null) continue;
+                var es = _Slot($"{part.path} — Outline / Shadow", _Effect(text), part.effectPreset, p => part.effectPreset = p, MobUIToolPresetFactory.Slot.Effect);
+                es.isEffect = true;
+                slots.Add(es);
+            }
+            foreach (var s in slots)
+            {
+                s.tab = false;
+                s.block = true;
+                s.owner = type.name;
+            }
+            try
+            {
+                foreach (var s in slots) _Diff(s);
+            }
+            finally
+            {
+                MobUIToolApplier.CleanupTemp();
+            }
+            slots.RemoveAll(s => s.component == null && s.preset == null && !s.isEffect);
+            return slots;
         }
 
         /// <summary>
@@ -149,9 +193,11 @@ namespace Mob404.Common.UITemplate.Editor
                 {
                     string reason = s.preset == null ? "ô trống" : typeMismatch ? "đổi kiểu effect" : "preset dùng chung — tách riêng";
                     string msg;
-                    var created = s.tab
-                        ? MobUIToolPresetFactory.SaveTabPreset(config, s.kind, s.component, s.rootRect, out msg)
-                        : MobUIToolPresetFactory.SaveButtonPreset(config, s.kind, s.component, s.rootRect, out msg);
+                    var created = s.block
+                        ? MobUIToolPresetFactory.SaveBlockPreset(config, s.kind, s.component, s.rootRect, s.owner, out msg)
+                        : s.tab
+                            ? MobUIToolPresetFactory.SaveTabPreset(config, s.kind, s.component, s.rootRect, out msg)
+                            : MobUIToolPresetFactory.SaveButtonPreset(config, s.kind, s.component, s.rootRect, out msg);
                     s.set(created);
                     log.Add($"{s.label}: {reason} → {msg}");
                     continue;
@@ -160,7 +206,8 @@ namespace Mob404.Common.UITemplate.Editor
                 var excluded = s.preset.excludedProperties ?? new string[0];
                 s.preset.UpdateProperties(s.component);
                 if (s.component is RectTransform)
-                    excluded = _With(excluded, s.rootRect ? MobUIToolApplier.PositionProperties : MobUIToolPresetFactory.ChildRectExcluded);
+                    excluded = _With(excluded, !s.rootRect ? MobUIToolPresetFactory.ChildRectExcluded
+                        : s.block ? MobUIToolPresetFactory.BlockRootExcluded : MobUIToolApplier.PositionProperties);
                 s.preset.excludedProperties = excluded;
                 EditorUtility.SetDirty(s.preset);
                 AssetDatabase.SaveAssetIfDirty(s.preset);
@@ -177,6 +224,7 @@ namespace Mob404.Common.UITemplate.Editor
             foreach (var t in config.types) n += _Count(t, preset);
             foreach (var t in config.imageTypes) n += _Count(t, preset);
             foreach (var t in config.tabTypes) n += _Count(t, preset);
+            foreach (var t in config.blockTypes) n += _Count(t, preset);
             return n;
         }
 
@@ -200,6 +248,13 @@ namespace Mob404.Common.UITemplate.Editor
                     if (extras != null)
                         foreach (var e in extras)
                             if (e != null) n += _Count(e, preset);
+                }
+                else if (f.FieldType == typeof(List<GGBlockPart>))
+                {
+                    var parts = (List<GGBlockPart>)f.GetValue(obj);
+                    if (parts != null)
+                        foreach (var part in parts)
+                            if (part != null) n += _Count(part, preset);
                 }
             }
             return n;

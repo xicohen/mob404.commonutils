@@ -93,6 +93,19 @@ namespace Mob404.Common.UITemplate.Editor
             return component != null ? SaveTabPreset(config, slot, component, excludePosition, out message) : null;
         }
 
+        /// <summary>Loại Block: tạo preset từ component NGAY TRÊN node đang chọn (gốc khối hoặc đúng node con mẫu).</summary>
+        public static Preset CreateForBlock(MobUIToolConfig config, Slot slot, System.Type componentType, bool rootRect, string owner, out string message)
+        {
+            var selected = Selection.activeGameObject;
+            if (selected == null)
+            {
+                message = "Chọn đúng node mẫu trong Hierarchy (gốc khối, hoặc node con của phần) trước.";
+                return null;
+            }
+            var component = _OnNode(selected, slot, componentType, out message);
+            return component != null ? SaveBlockPreset(config, slot, component, rootRect, owner, out message) : null;
+        }
+
         /// <summary>Khối Cost của loại Button: tạo preset từ component NGAY TRÊN node đang chọn (icon giá hoặc Text giá).</summary>
         public static Preset CreateForCost(MobUIToolConfig config, Slot slot, System.Type componentType, out string message)
         {
@@ -162,6 +175,50 @@ namespace Mob404.Common.UITemplate.Editor
 
         /// <summary>Thuộc tính bỏ qua của Rect node con (tab và button).</summary>
         public static readonly string[] ChildRectExcluded = { "m_LocalPosition" };
+
+        /// <summary>
+        /// Rect gốc của khối (Block): bỏ cả neo + pivot — mỗi màn neo khối theo bố cục riêng, đổi neo/pivot mà giữ
+        /// m_AnchoredPosition sẽ làm khối dời chỗ. Chỉ còn kích thước, scale (lật chiều), xoay.
+        /// </summary>
+        public static readonly string[] BlockRootExcluded = { "m_AnchoredPosition", "m_LocalPosition", "m_AnchorMin", "m_AnchorMax", "m_Pivot" };
+
+        /// <summary>
+        /// Tạo file preset cho một ô của loại Block từ component cho sẵn. owner = tên loại (đưa vào tên file để hai loại có
+        /// node trùng tên không lẫn nhau). rootRect = Rect của gốc khối (BlockRootExcluded); node con giữ vị trí trong khối.
+        /// </summary>
+        public static Preset SaveBlockPreset(MobUIToolConfig config, Slot slot, Component component, bool rootRect, string owner, out string message)
+        {
+            var preset = new Preset(component);
+            if (component is RectTransform) preset.excludedProperties = rootRect ? BlockRootExcluded : ChildRectExcluded;
+
+            string folder = $"{System.IO.Path.GetDirectoryName(AssetDatabase.GetAssetPath(config)).Replace('\\', '/')}/Presets/{_Folder(slot)}";
+            MobUIToolConfig.EnsureFolder(folder);
+            string path = AssetDatabase.GenerateUniqueAssetPath($"{folder}/{_BlockName(slot, component, Pascal(owner))}.preset");
+            AssetDatabase.CreateAsset(preset, path);
+            AssetDatabase.SaveAssets();
+            message = $"Đã tạo {path} từ '{component.name}'.";
+            return preset;
+        }
+
+        private static string _BlockName(Slot slot, Component c, string owner)
+        {
+            string node = Pascal(c.name);
+            switch (slot)
+            {
+                case Slot.Rect:
+                case Slot.TextRect:
+                    var rt = (RectTransform)c;
+                    return $"Rect_{owner}_{node}_{_Num(rt.rect.width)}x{_Num(rt.rect.height)}";
+                case Slot.Image:
+                    var image = (Image)c;
+                    return $"Img_{owner}_{node}_{(image.sprite != null ? Pascal(image.sprite.name) : _Hex(image.color))}";
+                case Slot.Text:
+                    var text = (Text)c;
+                    return $"Txt_{owner}_{node}_{text.fontSize}_{_Hex(text.color)}";
+                default:
+                    return _Name(slot, c, false);
+            }
+        }
 
         private static string _TabName(Slot slot, Component c)
         {

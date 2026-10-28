@@ -125,6 +125,36 @@ namespace Mob404.Common.UITemplate.Editor
         public Preset effectPreset;
     }
 
+    /// <summary>
+    /// Loại khối ghép (vd ô lực chiến FieldPower: nền + IconPower + IconPower/TextPower). rectTransformPreset/imagePreset của
+    /// GGTypeBase áp lên GameObject gốc (Rect gốc chỉ mang kích thước/scale, không mang vị trí/neo/pivot); mỗi phần con khai báo
+    /// theo đường dẫn tính từ gốc. Không Scan theo sprite — gắn marker bằng Attach to selection.
+    /// </summary>
+    [Serializable]
+    public class GGBlockType : GGTypeBase
+    {
+        public List<GGBlockPart> parts = new List<GGBlockPart>();
+    }
+
+    /// <summary>
+    /// Một phần con của khối. Sync structure: node ở path thì dùng luôn; không có thì tìm theo aliases (vị trí/tên cũ) rồi
+    /// dời + đổi tên về path — vẫn là GameObject cũ nên tham chiếu từ script giữ nguyên; không thấy nữa thì tạo node mới.
+    /// </summary>
+    [Serializable]
+    public class GGBlockPart
+    {
+        [Tooltip("Đường dẫn node tính từ gốc khối (vd IconPower/TextPower)")]
+        public string path;
+        [Tooltip("Đường dẫn cũ hay gặp của node này, tính từ gốc (vd ImagePower/TextPower) — Sync dời node về path và đổi tên, giữ tham chiếu")]
+        public List<string> aliases = new List<string>();
+
+        [Tooltip("File .preset của RectTransform — giữ vị trí/neo/scale trong khối")] public Preset rectPreset;
+        [Tooltip("File .preset của Image trên node")] public Preset imagePreset;
+        [Tooltip("File .preset của Text trên node (không bao giờ ghi nội dung chữ). Là khoá của Outline/Shadow")] public Preset textPreset;
+        [Tooltip("File .preset của Outline HOẶC Shadow — Text giữ đúng 1 component kiểu đó, xoá kiểu còn lại; ô trống = xoá cả hai")]
+        public Preset effectPreset;
+    }
+
     /// <summary>Prefab/scene chứa trực tiếp marker của một loại, kèm số marker trong file.</summary>
     public class GGLinkedAsset
     {

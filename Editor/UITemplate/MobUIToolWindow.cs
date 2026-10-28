@@ -11,7 +11,8 @@ namespace Mob404.Common.UITemplate.Editor
     /// Cửa sổ quản lý loại, ba tab:
     /// Button — Image có Button, preset Rect Button/Image + khối Text (Text là khoá → Rect Text, Outline/Shadow);
     /// Image — Image dùng sprite nguồn mà chưa thuộc loại Button, preset Rect Image/Image;
-    /// Tab — tab có Button + hai nửa ON/OFF (Image + Title): Sync structure + preset gốc/ON/OFF + I2 Localize.
+    /// Tab — tab có Button + hai nửa ON/OFF (Image + Title): Sync structure + preset gốc/ON/OFF + I2 Localize;
+    /// Block — khối ghép (vd ô lực chiến): preset gốc + từng phần con theo đường dẫn, Sync dời/đổi tên node theo alias.
     /// Chỉ ghi xuống file khi bấm Scan &amp; Attach / Apply / Remove; Preview không ghi gì.
     /// </summary>
     public class MobUIToolWindow : EditorWindow
@@ -19,14 +20,15 @@ namespace Mob404.Common.UITemplate.Editor
         private const int TAB_BUTTON = 0;
         private const int TAB_IMAGE = 1;
         private const int TAB_TAB = 2;
-        private static readonly string[] TAB_NAMES = { "Button", "Image", "Tab" };
+        private const int TAB_BLOCK = 3;
+        private static readonly string[] TAB_NAMES = { "Button", "Image", "Tab", "Block" };
 
         private static bool s_IndexStale = true;
 
         private MobUIToolConfig _config;
         private bool _indexed;
         private int _tab;
-        private readonly int[] _selected = new int[3];
+        private readonly int[] _selected = new int[4];
         private string _search = "";
         private Vector2 _listScroll;
         private Vector2 _detailScroll;
@@ -54,6 +56,14 @@ namespace Mob404.Common.UITemplate.Editor
             var window = GetWindow<MobUIToolWindow>("MobUITool");
             window.minSize = new Vector2(680, 460);
             window._Select(typeId, TAB_TAB);
+        }
+
+        /// <summary>Mở cửa sổ ở tab Block, chọn sẵn loại typeId.</summary>
+        public static void OpenBlock(string typeId)
+        {
+            var window = GetWindow<MobUIToolWindow>("MobUITool");
+            window.minSize = new Vector2(680, 460);
+            window._Select(typeId, TAB_BLOCK);
         }
 
         private void OnEnable() => EditorApplication.projectChanged += _OnProjectChanged;
@@ -191,13 +201,15 @@ namespace Mob404.Common.UITemplate.Editor
 
         private bool _IsTabTab => _tab == TAB_TAB;
 
-        /// <summary>Danh sách loại của tab đang mở (List&lt;GGButtonType&gt; / List&lt;GGImageType&gt; / List&lt;GGTabType&gt;).</summary>
-        private IList _List => _IsTabTab ? (IList)_config.tabTypes : _IsImageTab ? _config.imageTypes : _config.types;
+        private bool _IsBlockTab => _tab == TAB_BLOCK;
 
-        private string _ListProperty => _IsTabTab ? nameof(MobUIToolConfig.tabTypes)
+        /// <summary>Danh sách loại của tab đang mở (List&lt;GGButtonType&gt; / List&lt;GGImageType&gt; / List&lt;GGTabType&gt;).</summary>
+        private IList _List => _IsBlockTab ? (IList)_config.blockTypes : _IsTabTab ? _config.tabTypes : _IsImageTab ? _config.imageTypes : _config.types;
+
+        private string _ListProperty => _IsBlockTab ? nameof(MobUIToolConfig.blockTypes) : _IsTabTab ? nameof(MobUIToolConfig.tabTypes)
             : _IsImageTab ? nameof(MobUIToolConfig.imageTypes) : nameof(MobUIToolConfig.types);
 
-        private string _Unit => _IsTabTab ? "tab" : _IsImageTab ? "image" : "button";
+        private string _Unit => _IsBlockTab ? "block" : _IsTabTab ? "tab" : _IsImageTab ? "image" : "button";
 
         private void _DrawTypeList()
         {
@@ -227,7 +239,9 @@ namespace Mob404.Common.UITemplate.Editor
             if (AssetPreview.IsLoadingAssetPreviews()) Repaint();
 
             EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button(new GUIContent("+ Add", "Thêm loại mới với sprite đang chọn trong Project")))
+            if (GUILayout.Button(new GUIContent("+ Add", _IsBlockTab
+                    ? "Tạo loại từ khối mẫu đang chọn trong Hierarchy: preset cho gốc + mọi node con, gắn GGBlock lên mẫu"
+                    : "Thêm loại mới với sprite đang chọn trong Project")))
                 _AddType();
             using (new EditorGUI.DisabledScope(_Current == null))
             {
@@ -261,6 +275,15 @@ namespace Mob404.Common.UITemplate.Editor
 
         private void _AddType()
         {
+            if (_IsBlockTab)
+            {
+                var created = MobUIToolBlockApplier.CreateTypeFrom(_config, Selection.activeGameObject, null, out _message);
+                if (created == null) return;
+                _selected[_tab] = _List.Count - 1;
+                _search = "";
+                Debug.Log("[MobUITool] " + _message);
+                GUIUtility.ExitGUI();
+            }
             GGTypeBase type = _IsTabTab ? new GGTabType() : _IsImageTab ? (GGTypeBase)new GGImageType() : new GGButtonType();
             type.id = System.Guid.NewGuid().ToString("N").Substring(0, 8);
             type.sourceSprite = _FirstSelectedSprite();
@@ -274,7 +297,7 @@ namespace Mob404.Common.UITemplate.Editor
         /// <summary>Btn_Yellow / Img_PopupBg — tên loại theo sprite, bỏ tiền tố btn/button/img thừa của tên file.</summary>
         private string _DefaultName(Sprite sprite)
         {
-            string prefix = _IsTabTab ? "Tab_" : _IsImageTab ? "Img_" : "Btn_";
+            string prefix = _IsBlockTab ? "Block_" : _IsTabTab ? "Tab_" : _IsImageTab ? "Img_" : "Btn_";
             if (sprite == null) return prefix + "New";
             string name = sprite.name;
             foreach (var p in new[] { "button_", "btn_", "img_", "image_", "tab_" })
@@ -328,7 +351,9 @@ namespace Mob404.Common.UITemplate.Editor
             var type = _Current;
             if (type == null)
             {
-                EditorGUILayout.HelpBox($"Chưa có loại {TAB_NAMES[_tab]} nào. Chọn sprite trong Project rồi bấm \"+ Add\".", MessageType.Info);
+                EditorGUILayout.HelpBox(_IsBlockTab
+                    ? "Chưa có loại Block nào. Chọn GameObject gốc của khối mẫu trong Hierarchy (vd FieldPower) rồi bấm \"+ Add\"."
+                    : $"Chưa có loại {TAB_NAMES[_tab]} nào. Chọn sprite trong Project rồi bấm \"+ Add\".", MessageType.Info);
                 EditorGUILayout.EndVertical();
                 return;
             }
@@ -357,9 +382,16 @@ namespace Mob404.Common.UITemplate.Editor
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.DelayedTextField(tp.FindPropertyRelative("name"), new GUIContent("Name"));
             EditorGUILayout.LabelField("Id", type.id, EditorStyles.miniLabel);
-            EditorGUILayout.PropertyField(tp.FindPropertyRelative("sourceSprite"), new GUIContent("Scan sprite (tuỳ chọn)",
-                "Chỉ dùng để Scan & Attach tìm đối tượng CHƯA có marker. Đối tượng đã gắn đi theo loại (Name/Id), không đọc sprite này."));
+            if (!(type is GGBlockType))
+                EditorGUILayout.PropertyField(tp.FindPropertyRelative("sourceSprite"), new GUIContent("Scan sprite (tuỳ chọn)",
+                    "Chỉ dùng để Scan & Attach tìm đối tượng CHƯA có marker. Đối tượng đã gắn đi theo loại (Name/Id), không đọc sprite này."));
             if (EditorGUI.EndChangeCheck() && so.ApplyModifiedProperties()) _config.Save();
+
+            if (type is GGBlockType)
+            {
+                EditorGUILayout.HelpBox("Loại Block không Scan theo sprite — chọn gốc các khối trong Hierarchy rồi Attach to selection.", MessageType.None);
+                return;
+            }
 
             if (type is GGButtonType costType && MobUIToolApplier.HasCostKey(costType))
             {
@@ -404,6 +436,11 @@ namespace Mob404.Common.UITemplate.Editor
             if (type is GGTabType tabType)
             {
                 _DrawTabStyle(so, tp, tabType);
+                return;
+            }
+            if (type is GGBlockType blockType)
+            {
+                _DrawBlockStyle(so, tp, blockType);
                 return;
             }
             var buttonType = type as GGButtonType;
@@ -584,6 +621,89 @@ namespace Mob404.Common.UITemplate.Editor
             _EndGroup();
         }
 
+        /// <summary>
+        /// Loại Block: khối Gốc + mỗi phần con một khối (path, aliases, Rect/Image/Text/Outline-Shadow). Nút + của ô preset tạo
+        /// từ component NGAY TRÊN object đang chọn; "+ Add part" lấy node con đang chọn của một khối có GGBlock.
+        /// </summary>
+        private void _DrawBlockStyle(SerializedObject so, SerializedProperty tp, GGBlockType type)
+        {
+            _BeginGroup("Gốc", "GameObject gốc của khối (gắn GGBlock). Rect gốc không mang vị trí/neo/pivot — chỉ kích thước, scale (lật chiều), xoay");
+            _PresetRow(so, tp, nameof(GGTypeBase.rectTransformPreset), "Rect",
+                "File .preset của RectTransform gốc", () => type.rectTransformPreset, MobUIToolPresetFactory.Slot.Rect, typeof(RectTransform));
+            _PresetRow(so, tp, nameof(GGTypeBase.imagePreset), "Image",
+                "File .preset của Image trên gốc", () => type.imagePreset, MobUIToolPresetFactory.Slot.Image, typeof(Image));
+            _EndGroup();
+
+            var list = tp.FindPropertyRelative(nameof(GGBlockType.parts));
+            for (int i = 0; i < list.arraySize; i++)
+            {
+                string f = $"{nameof(GGBlockType.parts)}.Array.data[{i}]";
+                var part = type.parts[i];
+                _BeginGroup(string.IsNullOrEmpty(part.path) ? "(chưa có path)" : part.path, "Phần con, tìm theo đường dẫn tính từ gốc khối");
+                EditorGUILayout.BeginHorizontal();
+                EditorGUI.BeginChangeCheck();
+                EditorGUILayout.PropertyField(tp.FindPropertyRelative(f + "." + nameof(GGBlockPart.path)), new GUIContent("Path", "Đường dẫn node tính từ gốc khối (vd IconPower/TextPower)"));
+                if (EditorGUI.EndChangeCheck() && so.ApplyModifiedProperties()) _config.Save();
+                if (GUILayout.Button(new GUIContent("−", "Bỏ phần này khỏi loại (không xoá file preset, không đụng node)"), EditorStyles.miniButton, GUILayout.Width(22)))
+                {
+                    list.DeleteArrayElementAtIndex(i);
+                    if (so.ApplyModifiedProperties()) _config.Save();
+                    GUIUtility.ExitGUI();
+                }
+                EditorGUILayout.EndHorizontal();
+                EditorGUI.BeginChangeCheck();
+                EditorGUILayout.PropertyField(tp.FindPropertyRelative(f + "." + nameof(GGBlockPart.aliases)), new GUIContent("Aliases",
+                    "Đường dẫn cũ của node này ở các màn dựng khác (vd ImagePower/TextPower) — Apply dời node về Path và đổi tên, giữ tham chiếu"), true);
+                if (EditorGUI.EndChangeCheck() && so.ApplyModifiedProperties()) _config.Save();
+                _PresetRow(so, tp, f + "." + nameof(GGBlockPart.rectPreset), "Rect",
+                    $"RectTransform của {part.path} (giữ vị trí/neo/scale trong khối)", () => part.rectPreset,
+                    MobUIToolPresetFactory.Slot.Rect, typeof(RectTransform));
+                _PresetRow(so, tp, f + "." + nameof(GGBlockPart.imagePreset), "Image",
+                    $"Image của {part.path}", () => part.imagePreset, MobUIToolPresetFactory.Slot.Image, typeof(Image));
+                _PresetRow(so, tp, f + "." + nameof(GGBlockPart.textPreset), "Text",
+                    $"Text của {part.path} (không bao giờ ghi nội dung chữ). Là khoá của Outline/Shadow", () => part.textPreset,
+                    MobUIToolPresetFactory.Slot.Text, typeof(Text));
+                if (MobUIToolApplier.IsPresetFor(part.textPreset, typeof(Text)))
+                    _PresetRow(so, tp, f + "." + nameof(GGBlockPart.effectPreset), "Outline / Shadow",
+                        "Text giữ đúng 1 component kiểu đó, xoá kiểu còn lại. Để trống = xoá cả hai",
+                        () => part.effectPreset, MobUIToolPresetFactory.Slot.Effect, typeof(Outline), typeof(Shadow));
+                _EndGroup();
+            }
+            if (GUILayout.Button(new GUIContent("+ Add part từ node đang chọn",
+                    "Chọn node con mẫu của một khối đã gắn GGBlock: thêm phần với path tính từ gốc khối, kèm preset Rect/Image/Text/Outline-Shadow của node")))
+                _AddBlockPart(type);
+        }
+
+        private void _AddBlockPart(GGBlockType type)
+        {
+            var selected = Selection.activeGameObject;
+            var marker = selected != null ? selected.GetComponentInParent<GGBlock>(true) : null;
+            if (marker == null || marker.gameObject == selected)
+            {
+                _message = "Chọn node con (không phải gốc) của một khối đã gắn GGBlock.";
+                return;
+            }
+            string path = MobUIToolBlockApplier.RelativePath(marker.transform, selected.transform);
+            if (type.parts.Exists(p => p != null && p.path == path))
+            {
+                _message = $"Loại '{type.name}' đã có phần '{path}' — sửa thẳng trên khối rồi dùng Save to preset ở Inspector của GGBlock.";
+                return;
+            }
+
+            var part = new GGBlockPart { path = path };
+            part.rectPreset = MobUIToolPresetFactory.SaveBlockPreset(_config, MobUIToolPresetFactory.Slot.Rect, selected.transform, false, type.name, out _);
+            var image = selected.GetComponent<Image>();
+            if (image != null) part.imagePreset = MobUIToolPresetFactory.SaveBlockPreset(_config, MobUIToolPresetFactory.Slot.Image, image, false, type.name, out _);
+            var text = selected.GetComponent<Text>();
+            if (text != null) part.textPreset = MobUIToolPresetFactory.SaveBlockPreset(_config, MobUIToolPresetFactory.Slot.Text, text, false, type.name, out _);
+
+            Undo.RecordObject(_config, "MobUITool add block part");
+            type.parts.Add(part);
+            _config.Save();
+            _message = $"Thêm phần '{path}' vào loại '{type.name}'.";
+            GUIUtility.ExitGUI();
+        }
+
         private static void _BeginGroup(string title, string hint)
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
@@ -613,7 +733,9 @@ namespace Mob404.Common.UITemplate.Editor
                 _ShowPresetMenu(path, componentTypes);
             if (GUILayout.Button(new GUIContent("+", "Tạo preset từ object đang chọn trong Hierarchy (tự đặt tên, lưu vào Presets/) và gắn vào ô này"), EditorStyles.miniButton, GUILayout.Width(22)))
             {
-                var created = _IsTabTab
+                var created = _IsBlockTab
+                    ? MobUIToolPresetFactory.CreateForBlock(_config, slot, componentTypes[0], field == nameof(GGTypeBase.rectTransformPreset), _Current.name, out _message)
+                    : _IsTabTab
                     ? MobUIToolPresetFactory.CreateForTab(_config, slot, componentTypes[0], field == nameof(GGTypeBase.rectTransformPreset), out _message)
                     : field.StartsWith("cost")
                         ? MobUIToolPresetFactory.CreateForCost(_config, slot, componentTypes[0], out _message)
@@ -706,8 +828,9 @@ namespace Mob404.Common.UITemplate.Editor
         {
             var buttonType = type as GGButtonType;
             if (type is GGTabType tabType) _DrawTabAttach(tabType);
-            // Tab: Sync structure + Localize luôn có việc để làm, kể cả khi chưa gắn preset nào.
-            bool canApply = type is GGTabType ||
+            if (type is GGBlockType blockType) _DrawBlockAttach(blockType);
+            // Tab/Block: Sync structure luôn có việc để làm, kể cả khi chưa gắn preset nào.
+            bool canApply = type is GGTabType || type is GGBlockType ||
                             (buttonType != null && MobUIToolApplier.HasTextKey(buttonType)) ||
                             MobUIToolApplier.HasValues(type.rectTransformPreset, typeof(RectTransform)) ||
                             MobUIToolApplier.HasValues(type.imagePreset, typeof(Image));
@@ -746,6 +869,21 @@ namespace Mob404.Common.UITemplate.Editor
                         GUILayout.Height(22)))
                 {
                     MobUIToolScanner.AttachToSelection(type, Selection.gameObjects, out _message);
+                    Debug.Log("[MobUITool] " + _message);
+                }
+            }
+        }
+
+        /// <summary>Gắn marker GGBlock của loại lên chính các object đang chọn (gốc khối).</summary>
+        private void _DrawBlockAttach(GGBlockType type)
+        {
+            using (new EditorGUI.DisabledScope(_InPlayMode || Selection.gameObjects.Length == 0))
+            {
+                if (GUILayout.Button(new GUIContent($"Attach to selection ({Selection.gameObjects.Length})",
+                        "Gắn GGBlock của loại này lên CHÍNH từng object đang chọn (chọn gốc khối, vd FieldPower). Undo được; lưu scene/prefab rồi Refresh."),
+                        GUILayout.Height(22)))
+                {
+                    MobUIToolBlockApplier.AttachToSelection(type, Selection.gameObjects, out _message);
                     Debug.Log("[MobUITool] " + _message);
                 }
             }
